@@ -31,3 +31,7 @@ mediamtx.exe
 mediamtx
 media/LICENSE
 *.zip
+
+# Playwright 결과물
+test-results/
+playwright-report/
