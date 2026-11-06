@@ -16,9 +16,13 @@
 
 ### Docker
 ```bash
-docker run --rm -it -v "$PWD/media/mediamtx.yml:/mediamtx.yml" -p 8888:8888 -p 8889:8889 -p 8189:8189/udp -p 9997:9997 bluenviron/mediamtx:1.21.3
+docker run --rm -it -v "$PWD/media/mediamtx.yml:/mediamtx.yml" -p 8888:8888 -p 8889:8889 -p 8189:8189/udp bluenviron/mediamtx:1.21.3
 ```
-Docker는 아직 실행해 보지 않았다. Docker Desktop(Windows/macOS)에선 WebRTC ICE 후보가 컨테이너 IP로 잡혀 연결이 안 될 수 있다 → `webrtcAdditionalHosts`에 호스트 IP를 넣는다. 그리고 설정의 `apiAddress: 127.0.0.1:9997`은 컨테이너 안에서만 열리므로 Docker에선 `:9997`로 바꿔야 호스트에서 API가 보인다.
+(Windows Git Bash에선 `$PWD` 대신 `$(pwd -W)`)
+
+- 2026-11-06 Docker Desktop(Windows)에서 실행 → Playwright E2E(`npm run test:e2e`) 통과. WebRTC는 `127.0.0.1` 후보로 연결됐다.
+- **localhost 밖(다른 기기, 서버 배포)**에선 ICE 후보가 컨테이너 IP로 잡혀 연결이 안 될 수 있다 → `webrtcAdditionalHosts`에 호스트 공인 IP·도메인을 넣는다(D2 배포 때 확인).
+- Control API(9997)는 Docker에선 호스트에서 안 보인다(설정이 `127.0.0.1`에만 열고, MediaMTX 기본 권한도 localhost만 허용). 테스트는 API 없이 HLS 응답(200/404)으로 판정한다.
 
 ## 포트
 

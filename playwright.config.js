@@ -19,7 +19,7 @@ module.exports = defineConfig({
   },
   // 이미 켜 둔 서버가 있으면 그대로 쓴다
   webServer: [
-    { command: `${mediamtx} media/mediamtx.yml`, url: 'http://127.0.0.1:9997/v3/paths/list', reuseExistingServer: true },
+    { command: `${mediamtx} media/mediamtx.yml`, url: 'http://localhost:8888/live/ready/', reuseExistingServer: true },
     { command: 'python -m http.server 8000 --bind 127.0.0.1 -d web', url: 'http://localhost:8000/publish.html', reuseExistingServer: true },
   ],
 });

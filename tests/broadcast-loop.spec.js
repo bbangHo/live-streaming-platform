@@ -29,7 +29,8 @@ const READ_TICK = `(() => { const v = document.getElementById('video'); const c 
     if (p[0] + p[1] + p[2] > 384) n |= 1 << i; }
   return { tick: n, now: Math.floor(Date.now() / ${TICK_MS}) & 0xffff }; })()`;
 
-const paths = async (request) => (await (await request.get('http://127.0.0.1:9997/v3/paths/list')).json()).items;
+// 방송 중이면 HLS 재생목록 200, 없으면 404 (Control API는 Docker에선 localhost 제한에 막혀 안 쓴다)
+const hlsStatus = async (request) => (await request.get(`http://localhost:8888/live/${KEY}/index.m3u8`)).status();
 
 test('진짜 탭 캡처 송출 → HLS 시청 루프', async ({ context, request }) => {
   const source = await context.newPage();
@@ -48,7 +49,7 @@ test('진짜 탭 캡처 송출 → HLS 시청 루프', async ({ context, request
   await expect(pub.locator('#state')).toHaveText('connected', { timeout: 20_000 });
   await expect(pub.locator('#log')).toContainText('화면 소리 1개, 마이크 1개');
 
-  await expect.poll(async () => (await paths(request)).find(p => p.name === `live/${KEY}`)?.ready, { timeout: 15_000 }).toBe(true);
+  await expect.poll(() => hlsStatus(request), { timeout: 15_000 }).toBe(200);
 
   const watch = await context.newPage();
   await watch.goto('http://localhost:8000/watch.html');
@@ -91,5 +92,5 @@ test('진짜 탭 캡처 송출 → HLS 시청 루프', async ({ context, request
   // 3) 캡처 중인 탭을 닫으면(= 공유 중지) 송출이 스스로 끝나는가
   await source.close();
   await expect(pub.locator('#state')).toHaveText('종료', { timeout: 10_000 });
-  await expect.poll(async () => (await paths(request)).some(p => p.name === `live/${KEY}`), { timeout: 10_000 }).toBe(false);
+  await expect.poll(() => hlsStatus(request), { timeout: 10_000 }).toBe(404);
 });
