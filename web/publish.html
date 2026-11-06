@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>송출 (D1 스파이크)</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 860px; margin: 24px auto; padding: 0 16px; }
+  video { width: 100%; background: #000; aspect-ratio: 16/9; }
+  label, button { margin-right: 8px; }
+  #log { white-space: pre-wrap; font: 12px monospace; background: #f4f4f4; padding: 8px; min-height: 4em; }
+</style>
+</head>
+<body>
+<h1>브라우저 송출 (WHIP)</h1>
+<p>
+  <label>MediaMTX <input id="server" value="http://localhost:8889" size="24"></label>
+  <label>스트림 키 <input id="key" value="test" size="10"></label>
+</p>
+<p>
+  <button id="start">방송 시작</button>
+  <button id="stop" disabled>방송 종료</button>
+  <span id="state">대기</span>
+</p>
+<video id="preview" autoplay muted playsinline></video>
+<div id="log"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const log = (m) => { $('log').textContent += new Date().toLocaleTimeString() + ' ' + m + '\n'; };
+let pc, sessionUrl, streams = [], audioCtx;
+
+// 화면(+탭/시스템 소리)과 마이크를 Web Audio로 한 트랙에 섞는다
+async function capture() {
+  const display = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30 }, audio: true });
+  streams.push(display);
+  let mic = null;
+  try {
+    mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    streams.push(mic);
+  } catch (e) { log('마이크 없음/거부: ' + e.message + ' — 화면 소리만 송출'); }
+
+  audioCtx = new AudioContext();
+  const dest = audioCtx.createMediaStreamDestination();
+  for (const s of [display, mic]) {
+    if (s && s.getAudioTracks().length) audioCtx.createMediaStreamSource(s).connect(dest);
+  }
+  log(`트랙: 화면 소리 ${display.getAudioTracks().length}개, 마이크 ${mic ? mic.getAudioTracks().length : 0}개`);
+
+  const video = display.getVideoTracks()[0];
+  video.onended = () => { log('브라우저에서 화면 공유 중지됨'); stop(); };
+  return new MediaStream([video, dest.stream.getAudioTracks()[0]]);
+}
+
+async function start() {
+  $('start').disabled = true;
+  try {
+    const media = await capture();
+    $('preview').srcObject = media;
+
+    pc = new RTCPeerConnection();
+    pc.onconnectionstatechange = () => { $('state').textContent = pc.connectionState; log('연결 상태: ' + pc.connectionState); };
+    for (const track of media.getTracks()) {
+      const tr = pc.addTransceiver(track, { direction: 'sendonly' });
+      // HLS(fMP4)는 VP8을 못 담는다 → 영상은 H264 우선
+      if (track.kind === 'video') {
+        const codecs = RTCRtpSender.getCapabilities('video').codecs;
+        tr.setCodecPreferences([...codecs.filter(c => c.mimeType === 'video/H264'), ...codecs.filter(c => c.mimeType !== 'video/H264')]);
+      }
+    }
+
+    await pc.setLocalDescription(await pc.createOffer());
+    // shortcut: trickle ICE 없이 후보 수집이 끝난 뒤 한 번에 보낸다(로컬/공인IP면 충분), 연결이 느리면 trickle(PATCH)로 바꾼다
+    await new Promise((ok) => {
+      if (pc.iceGatheringState === 'complete') return ok();
+      pc.onicegatheringstatechange = () => pc.iceGatheringState === 'complete' && ok();
+      setTimeout(ok, 3000);
+    });
+
+    const url = `${$('server').value.replace(/\/$/, '')}/live/${encodeURIComponent($('key').value)}/whip`;
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/sdp' }, body: pc.localDescription.sdp });
+    if (res.status !== 201) throw new Error(`WHIP ${res.status}: ${await res.text()}`);
+    const loc = res.headers.get('Location');
+    sessionUrl = loc && new URL(loc, url).href;
+    await pc.setRemoteDescription({ type: 'answer', sdp: await res.text() });
+    log('WHIP 201, 세션: ' + (sessionUrl || '(Location 헤더 없음)'));
+    $('stop').disabled = false;
+  } catch (e) {
+    log('시작 실패: ' + e.message);
+    stop();
+  }
+}
+
+async function stop() {
+  // WHIP 세션 DELETE → MediaMTX가 즉시 path를 닫는다
+  if (sessionUrl) { fetch(sessionUrl, { method: 'DELETE' }).catch(() => {}); sessionUrl = null; }
+  pc?.close(); pc = null;
+  streams.forEach(s => s.getTracks().forEach(t => t.stop())); streams = [];
+  audioCtx?.close(); audioCtx = null;
+  $('preview').srcObject = null;
+  $('state').textContent = '종료';
+  $('start').disabled = false; $('stop').disabled = true;
+  log('방송 종료');
+}
+
+$('start').onclick = start;
+$('stop').onclick = stop;
+</script>
+</body>
+</html>

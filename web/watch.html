@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>시청 (D1 스파이크)</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 860px; margin: 24px auto; padding: 0 16px; }
+  video { width: 100%; background: #000; aspect-ratio: 16/9; }
+  #log { white-space: pre-wrap; font: 12px monospace; background: #f4f4f4; padding: 8px; min-height: 4em; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.20/dist/hls.min.js"></script>
+</head>
+<body>
+<h1>시청 (HLS)</h1>
+<p>
+  <label>HLS 서버 <input id="server" value="http://localhost:8888" size="24"></label>
+  <label>스트림 키 <input id="key" value="test" size="10"></label>
+  <button id="play">재생</button>
+</p>
+<video id="video" controls autoplay muted playsinline></video>
+<div id="log"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const log = (m) => { $('log').textContent += new Date().toLocaleTimeString() + ' ' + m + '\n'; };
+let hls;
+
+function play() {
+  const src = `${$('server').value.replace(/\/$/, '')}/live/${encodeURIComponent($('key').value)}/index.m3u8`;
+  const video = $('video');
+  hls?.destroy();
+  log('재생: ' + src);
+  if (window.Hls && Hls.isSupported()) {
+    hls = new Hls({ lowLatencyMode: true });
+    hls.on(Hls.Events.MANIFEST_PARSED, () => { log('매니페스트 OK'); video.play().catch(() => {}); });
+    hls.on(Hls.Events.ERROR, (_, d) => {
+      log(`에러: ${d.type} / ${d.details}${d.fatal ? ' (치명적)' : ''}`);
+      // 방송 시작 전이면 404 → 3초 뒤 다시 시도
+      if (d.fatal) { hls.destroy(); setTimeout(play, 3000); }
+    });
+    hls.loadSource(src);
+    hls.attachMedia(video);
+  } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    video.src = src; // Safari(iOS)는 HLS 네이티브 재생
+  } else {
+    log('이 브라우저는 HLS 재생 불가');
+  }
+}
+
+$('play').onclick = play;
+</script>
+</body>
+</html>
