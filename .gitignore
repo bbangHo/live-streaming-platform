@@ -25,3 +25,13 @@ Thumbs.db
 .idea/
 .vscode/
 *.log
+
+# MediaMTX 바이너리 (media/README.md 참고해 각자 내려받음)
+mediamtx.exe
+mediamtx
+media/LICENSE
+*.zip
+
+# Playwright 결과물
+test-results/
+playwright-report/

@@ -1,0 +1,34 @@
+# D1 스파이크용 MediaMTX 설정. 여기 없는 키는 MediaMTX 기본값을 쓴다.
+# 브라우저 → WHIP(:8889) → MediaMTX → LL-HLS(:8888) → hls.js
+
+logLevel: info
+
+# 이번 스파이크에서 안 쓰는 입출력은 끈다 (포트 충돌·노출 줄이기)
+rtsp: no
+rtmp: no
+srt: no
+moq: no
+
+# 상태 확인용 Control API (curl로 path 목록 조회). 로컬에서만 연다.
+api: yes
+apiAddress: 127.0.0.1:9997
+
+# WebRTC: WHIP 수신(송출) + WHEP(저지연 시청). 둘 다 :8889
+webrtc: yes
+webrtcAddress: :8889
+webrtcAllowOrigins: ['*']   # shortcut: 스파이크라 전부 허용, 배포 땐 서비스 도메인으로 좁힌다
+webrtcLocalUDPAddress: :8189
+
+# HLS 시청 출력. lowLatency = LL-HLS (fMP4 + partial segment)
+hls: yes
+hlsAddress: :8888
+hlsAllowOrigins: ['*']
+hlsVariant: lowLatency
+hlsSegmentCount: 7
+hlsSegmentDuration: 1s
+hlsPartDuration: 200ms
+hlsAlwaysRemux: yes          # 첫 시청자도 바로 재생되게 송출 시작부터 HLS 생성
+
+# 경로: live/<stream>. 스트림 키 인증은 D3(인증) 단계에서 authHTTPAddress로 붙인다.
+paths:
+  "~^live/[A-Za-z0-9_-]+$":

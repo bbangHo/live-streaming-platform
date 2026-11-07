@@ -1,0 +1,11 @@
+{
+  "name": "live-streaming-platform",
+  "private": true,
+  "description": "치지직 같은 실시간 라이브 방송 송출·시청 웹 서비스. (Codemit 공모전 제출작)",
+  "scripts": {
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.0"
+  }
+}
