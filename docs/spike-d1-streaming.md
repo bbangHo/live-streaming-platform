@@ -23,14 +23,8 @@ MediaMTX :8889 ──(path live/<key>)──▶ LL-HLS :8888 ──▶ watch.htm
 
 `getDisplayMedia`/`getUserMedia`는 secure context(HTTPS 또는 `localhost`)에서만 동작한다. 아래는 모두 `localhost` 기준. **`127.0.0.1`이 아닌 `localhost`로 열 것**(둘 다 secure context지만 안내를 하나로 통일).
 
-1. MediaMTX 실행 (내려받기는 [media/README.md](../media/README.md)):
-   ```bash
-   media/mediamtx.exe media/mediamtx.yml
-   ```
-2. 정적 페이지 서버 (레포 루트에서, 다른 터미널):
-   ```bash
-   python -m http.server 8000 --bind 127.0.0.1 -d web
-   ```
+1. 전체 기동 (레포 루트): `docker compose up -d` — MediaMTX + 페이지 서버(nginx :8000). Docker 없이는 [media/README.md](../media/README.md)의 바이너리 + `python -m http.server 8000 --bind 127.0.0.1 -d web`.
+2. **페이지는 반드시 `http://localhost:8000/...`로 연다.** `file://`로 열면 Origin이 `null`이라 MediaMTX가 `Access-Control-Allow-Origin`을 안 줘서 WHIP POST가 `Failed to fetch`로 실패한다(실제로 겪음, `curl -H "Origin: null"`로 재현 확인). 페이지도 `file://`이면 경고를 띄운다.
 3. 송출: Chrome/Edge로 `http://localhost:8000/publish.html` → 스트림 키 `test` → **방송 시작** → 공유 창에서 **탭 또는 전체 화면 + "오디오 공유" 체크** → 마이크 권한 허용. 로그에 `WHIP 201`, 상태 `connected`가 떠야 한다.
 4. 시청: 다른 탭/창(또는 다른 브라우저)으로 `http://localhost:8000/watch.html` → **재생**. 1~3초 지연으로 화면이 나와야 한다. 영상은 처음에 음소거(`muted`)로 자동재생되므로 컨트롤에서 소리를 켠다.
 5. 종료: publish 페이지에서 **방송 종료**(또는 브라우저의 "공유 중지"). watch 쪽은 재생이 멈추고 3초마다 다시 시도한다.

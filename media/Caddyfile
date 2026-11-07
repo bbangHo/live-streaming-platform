@@ -1,0 +1,20 @@
+# compose.yml의 https 프로필용. {$DOMAIN}이 공인 도메인이면 Let's Encrypt 자동 발급, localhost·IP면 Caddy 사설 인증서
+{$DOMAIN} {
+	encode gzip
+
+	# WHIP 송출 / WHEP 시청 (WebRTC 시그널링)
+	@webrtc path_regexp ^/live/[^/]+/(whip|whep)(/.*)?$
+	handle @webrtc {
+		reverse_proxy mediamtx:8889
+	}
+
+	# HLS 재생목록·세그먼트
+	handle /live/* {
+		reverse_proxy mediamtx:8888
+	}
+
+	handle {
+		root * /srv/web
+		file_server
+	}
+}

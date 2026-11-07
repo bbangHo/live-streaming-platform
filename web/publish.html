@@ -14,7 +14,7 @@
 <body>
 <h1>브라우저 송출 (WHIP)</h1>
 <p>
-  <label>MediaMTX <input id="server" value="http://localhost:8889" size="24"></label>
+  <label>MediaMTX <input id="server" size="24"></label>
   <label>스트림 키 <input id="key" value="test" size="10"></label>
 </p>
 <p>
@@ -27,7 +27,10 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
+// http(로컬 실행)면 이 페이지를 연 호스트의 MediaMTX 포트로, https(Caddy)면 같은 출처로
+$('server').value = location.protocol === 'https:' ? location.origin : `http://${location.hostname || 'localhost'}:8889`;
 const log = (m) => { $('log').textContent += new Date().toLocaleTimeString() + ' ' + m + '\n'; };
+if (location.protocol === 'file:') log('⚠ file://로 열면 송출이 안 됩니다(CORS). docker compose up -d 후 http://localhost:8000/publish.html 로 여세요.');
 let pc, sessionUrl, streams = [], audioCtx;
 
 // 화면(+탭/시스템 소리)과 마이크를 Web Audio로 한 트랙에 섞는다

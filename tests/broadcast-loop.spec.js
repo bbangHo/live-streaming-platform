@@ -11,6 +11,9 @@ const TAB_HZ = 440;   // 캡처되는 탭이 내는 소리
 const MIC_HZ = 1000;  // 가짜 마이크 소리
 const TICK_MS = 50;   // 영상에 그리는 시계 한 칸
 const KEY = 'pw' + Date.now();
+// E2E_BASE 없으면 로컬 개발 서버(:8000 + MediaMTX 직접), 있으면 배포 주소 하나로 (예: https://localhost)
+const BASE = process.env.E2E_BASE ?? 'http://localhost:8000';
+const HLS = process.env.E2E_BASE ?? 'http://localhost:8888';
 
 // 캡처 대상 탭: 440Hz를 틀고, 현재 시각(50ms 단위 16비트)을 흑백 블록 8x2로 그린다
 const SOURCE_HTML = `<!doctype html><title>SPIKE-SOURCE</title>
@@ -30,7 +33,7 @@ const READ_TICK = `(() => { const v = document.getElementById('video'); const c 
   return { tick: n, now: Math.floor(Date.now() / ${TICK_MS}) & 0xffff }; })()`;
 
 // 방송 중이면 HLS 재생목록 200, 없으면 404 (Control API는 Docker에선 localhost 제한에 막혀 안 쓴다)
-const hlsStatus = async (request) => (await request.get(`http://localhost:8888/live/${KEY}/index.m3u8`)).status();
+const hlsStatus = async (request) => (await request.get(`${HLS}/live/${KEY}/index.m3u8`)).status();
 
 test('진짜 탭 캡처 송출 → HLS 시청 루프', async ({ context, request }) => {
   const source = await context.newPage();
@@ -43,7 +46,7 @@ test('진짜 탭 캡처 송출 → HLS 시청 루프', async ({ context, request
       o.frequency.value = hz; o.connect(d); o.start(); return d.stream;
     };
   }, MIC_HZ);
-  await pub.goto('http://localhost:8000/publish.html');
+  await pub.goto(`${BASE}/publish.html`);
   await pub.fill('#key', KEY);
   await pub.click('#start');
   await expect(pub.locator('#state')).toHaveText('connected', { timeout: 20_000 });
@@ -52,7 +55,7 @@ test('진짜 탭 캡처 송출 → HLS 시청 루프', async ({ context, request
   await expect.poll(() => hlsStatus(request), { timeout: 15_000 }).toBe(200);
 
   const watch = await context.newPage();
-  await watch.goto('http://localhost:8000/watch.html');
+  await watch.goto(`${BASE}/watch.html`);
   await watch.fill('#key', KEY);
   await watch.click('#play');
   await expect.poll(() => watch.evaluate(() => document.getElementById('video').currentTime), { timeout: 30_000 }).toBeGreaterThan(2);
@@ -87,7 +90,8 @@ test('진짜 탭 캡처 송출 → HLS 시청 루프', async ({ context, request
   console.log('glass-to-glass latency ms', latencies);
   for (const ms of latencies) expect(ms, '지연(ms)이 0~15초 범위 = 시계를 제대로 읽음').toBeLessThan(15_000);
   const advanced = ((reads[2].tick - reads[0].tick + 0x10000) & 0xffff) * TICK_MS;
-  expect(advanced, '2초 동안 영상 속 시계가 흘렀다 = 라이브').toBeGreaterThan(1000);
+  // 멈춘 화면이면 0. LL-HLS가 1초쯤 버퍼링하는 경우가 있어(1/5회 관찰) 기준은 0.5초
+  expect(advanced, '2초 동안 영상 속 시계가 흘렀다 = 라이브').toBeGreaterThan(500);
 
   // 3) 캡처 중인 탭을 닫으면(= 공유 중지) 송출이 스스로 끝나는가
   await source.close();

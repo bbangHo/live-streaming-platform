@@ -1,0 +1,45 @@
+# 전체 스택 로컬 실행: docker compose up -d  →  http://localhost:8000/publish.html
+# (HTTPS가 필요할 때만: docker compose --profile https up -d  →  https://<DOMAIN>/publish.html)
+services:
+  mediamtx:
+    image: bluenviron/mediamtx:1.21.3
+    restart: unless-stopped
+    volumes:
+      - ./media/mediamtx.yml:/mediamtx.yml:ro
+    environment:
+      # 브라우저에 알려 줄 WebRTC(ICE) 주소. 같은 PC면 127.0.0.1, 다른 기기에서 붙으면 PC의 LAN IP
+      MTX_WEBRTCADDITIONALHOSTS: ${PUBLIC_HOST:-127.0.0.1}
+      MTX_WEBRTCLOCALTCPADDRESS: :8189   # UDP가 막힌 망용 TCP 대체 경로
+    ports:
+      - "8888:8888"        # HLS 시청
+      - "8889:8889"        # WHIP 송출 / WHEP
+      - "8189:8189/udp"    # WebRTC 미디어
+      - "8189:8189/tcp"
+
+  web:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    volumes:
+      - ./web:/usr/share/nginx/html:ro
+    ports:
+      - "${WEB_PORT:-8000}:80"
+
+  # 선택: HTTPS (모바일 기기에서 송출하거나 공인 도메인에 올릴 때). 페이지·WHIP·HLS를 한 출처로 묶는다
+  caddy:
+    image: caddy:2.10-alpine
+    profiles: [https]
+    restart: unless-stopped
+    depends_on: [mediamtx]
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    ports:
+      - "443:443"
+      - "443:443/udp"
+      - "80:80"
+    volumes:
+      - ./media/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./web:/srv/web:ro
+      - caddy_data:/data
+
+volumes:
+  caddy_data:
