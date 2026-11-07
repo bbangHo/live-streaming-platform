@@ -12,7 +12,7 @@
 | **미디어 서버** | **MediaMTX** (WHIP 수신 → HLS + WHEP 출력 + 녹화) | **고정** (아래 제약 때문) |
 | **송출(브라우저)** | WebRTC **WHIP** — PC `getDisplayMedia`+`getUserMedia`, 모바일 `getUserMedia` | **고정** |
 | **시청** | 대중=**HLS**(hls.js), 저지연 옵션=WHEP | 고정 |
-| 백엔드 | **권장: NestJS(TS)** 또는 Spring Boot — *팀 선택, 조정 가능* | 조정 |
+| 백엔드 | **Spring Boot 4 (Java 21)** + Spring Security · BCrypt · JWT(access+refresh, stateless) · JPA · Flyway → `server/` | **고정** (D3 확정) |
 | 프론트 | **권장: React/Next + hls.js** | 조정 |
 | DB | **PostgreSQL** (영구 저장 필수) | 거의 고정 |
 | 배포 | **HTTPS 필수** (getUserMedia는 secure context 전용) | **고정** |
@@ -46,14 +46,17 @@
 | 등록·조회·수정·삭제 | REST CRUD | `api/broadcasts` (controller/service) |
 | 목록·상세 + 다른 기기 수신·재생 | 목록/상세 페이지 + hls.js 플레이어(HLS URL) | `web/src/pages/broadcasts/*` |
 | 방송 중/종료 상태 관리 + 종료 시 송출 중단 | DB `status`(LIVE/ENDED) + stop 시 WHIP 종료 + (MediaMTX webhook로 동기화) | `broadcast.status`, `/stop`, webhook |
-| **영구 저장 + 재시작 후 조회** | PostgreSQL 저장 (인메모리 금지) | `broadcasts` 테이블 |
+| **영구 저장 + 재시작 후 조회** | PostgreSQL 저장 (인메모리 금지), compose `pgdata` 볼륨 | `broadcasts` 테이블 ([V1__init.sql](server/src/main/resources/db/migration/V1__init.sql)) — D3에서 `down`→`up` 후 조회 수동 확인 |
 
 ### 필수 — 사용자 인증 및 인가
-| 체크리스트 | 구현 방법 | (계획) 위치 |
+| 체크리스트 | 구현 방법 | 위치 (D3 구현 완료) |
 |---|---|---|
-| 회원가입/로그인/로그아웃/상태관리 | 비번 **argon2/bcrypt** 해싱 + JWT(access/refresh) 또는 세션쿠키 | `api/auth/*` |
-| 비로그인=조회·시청 가능 / 등록·송출=로그인만 | 라우트 가드(인증 미들웨어) | `middleware/auth`, 라우트별 적용 |
-| **수정·삭제·송출제어 시 서버에서 소유자 검증** | 각 변경 API에서 `broadcast.ownerId === req.user.id` 재확인, 아니면 403 | `broadcasts.service` 전 변경 메서드 |
+| 회원가입/로그인/로그아웃/상태관리 | 비번 **BCrypt** 해싱. access JWT(HS256, 15분) + refresh(불투명 랜덤, DB엔 SHA-256 해시, 14일, 재발급 시 회전). 로그아웃 = refresh 폐기 | `POST /api/auth/signup·login·refresh·logout`, `GET /api/auth/me` → [AuthController](server/src/main/java/com/livestream/auth/AuthController.java), [AuthService](server/src/main/java/com/livestream/auth/AuthService.java), [JwtProvider](server/src/main/java/com/livestream/auth/JwtProvider.java) |
+| 비로그인=조회·시청 가능 / 등록·송출=로그인만 | Spring Security 필터 체인: `GET /api/broadcasts/**` 공개, 그 외 인증 필요(없으면 401). HLS 시청은 MediaMTX `:8888` 공개 | [SecurityConfig](server/src/main/java/com/livestream/config/SecurityConfig.java), [JwtAuthFilter](server/src/main/java/com/livestream/auth/JwtAuthFilter.java) |
+| **수정·삭제·송출제어 시 서버에서 소유자 검증** | 모든 변경 메서드가 `requireOwner` 경유 → `broadcast.ownerId == 토큰의 사용자 id` 아니면 403 | `PATCH·DELETE /api/broadcasts/{id}`, `POST /api/broadcasts/{id}/start·stop` → [BroadcastService.requireOwner](server/src/main/java/com/livestream/broadcast/BroadcastService.java) |
+| (검증) 비로그인/소유자/타인 | 통합 테스트(실 PostgreSQL, Testcontainers) | [BroadcastAuthorizationTest](server/src/test/java/com/livestream/broadcast/BroadcastAuthorizationTest.java), [AuthFlowTest](server/src/test/java/com/livestream/auth/AuthFlowTest.java), [JwtProviderTest](server/src/test/java/com/livestream/auth/JwtProviderTest.java) |
+
+> 남은 일: WHIP 송출 자체(MediaMTX `:8889`)는 아직 누구나 가능 — MediaMTX `authHTTPAddress`로 백엔드가 송출 권한을 판정하게 묶는 건 D6~D8(송출 페이지 연동 때).
 
 ### 선택 — 가산점 (효율순: 댓글 → 녹화 → 도네이션)
 | 체크리스트 | 구현 방법 | 비고 |
