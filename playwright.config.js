@@ -21,6 +21,7 @@ module.exports = defineConfig({
   // 이미 켜 둔 서버가 있으면 그대로 쓴다. E2E_BASE(배포 주소)로 돌릴 땐 띄우지 않는다
   webServer: process.env.E2E_BASE ? [] : [
     { command: `${mediamtx} media/mediamtx.yml`, url: 'http://localhost:8888/live/ready/', reuseExistingServer: true },
+    // docker compose up 상태면 그 web(nginx:8000)·MediaMTX를 그대로 쓴다
     { command: 'python -m http.server 8000 --bind 127.0.0.1 -d web', url: 'http://localhost:8000/publish.html', reuseExistingServer: true },
   ],
 });
