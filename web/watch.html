@@ -14,7 +14,7 @@
 <body>
 <h1>시청 (HLS)</h1>
 <p>
-  <label>HLS 서버 <input id="server" value="http://localhost:8888" size="24"></label>
+  <label>HLS 서버 <input id="server" size="24"></label>
   <label>스트림 키 <input id="key" value="test" size="10"></label>
   <button id="play">재생</button>
 </p>
@@ -23,6 +23,8 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
+// 로컬 개발(python 서버 :8000)은 MediaMTX에 직접, 배포(Caddy)는 같은 출처로
+$('server').value = location.port === '8000' ? 'http://localhost:8888' : location.origin;
 const log = (m) => { $('log').textContent += new Date().toLocaleTimeString() + ' ' + m + '\n'; };
 let hls;
 
