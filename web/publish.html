@@ -28,6 +28,8 @@
 <script>
 const $ = (id) => document.getElementById(id);
 // http(로컬 실행)면 이 페이지를 연 호스트의 MediaMTX 포트로, https(Caddy)면 같은 출처로
+const qk = new URLSearchParams(location.search).get('key'); // 방송 상세 → 「송출 페이지」 링크로 오면 스트림 키 채움
+if (qk) $('key').value = qk;
 $('server').value = location.protocol === 'https:' ? location.origin : `http://${location.hostname || 'localhost'}:8889`;
 const log = (m) => { $('log').textContent += new Date().toLocaleTimeString() + ' ' + m + '\n'; };
 if (location.protocol === 'file:') log('⚠ file://로 열면 송출이 안 됩니다(CORS). docker compose up -d 후 http://localhost:8000/publish.html 로 여세요.');

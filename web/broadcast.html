@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>방송</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.20/dist/hls.min.js"></script>
+<script src="app.js"></script>
+</head>
+<body>
+<nav id="nav"></nav>
+<main>
+  <div id="player"></div>
+  <h1 id="title"></h1>
+  <p class="row"><span id="status"></span><span id="owner" class="muted"></span></p>
+  <p id="description" style="white-space: pre-wrap"></p>
+  <p class="error" id="error"></p>
+
+  <!-- 소유자에게만 보인다. 버튼을 숨기는 건 편의일 뿐, 권한은 서버가 매 요청마다 다시 확인한다(타인 403) -->
+  <section id="manage" class="card" hidden>
+    <h2>방송 관리</h2>
+    <p class="muted">스트림 키 <code id="stream-key"></code> · <a id="publish-link" target="_blank">송출 페이지 열기</a></p>
+    <div class="row">
+      <button id="start" class="primary">방송 시작</button>
+      <button id="stop">방송 종료</button>
+      <button id="delete" class="danger">삭제</button>
+    </div>
+    <form id="edit" style="margin-top: 12px">
+      <input name="title" maxlength="100" required>
+      <textarea name="description" maxlength="1000" rows="3" placeholder="설명 (선택)"></textarea>
+      <div><button>수정 저장</button></div>
+    </form>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const id = new URLSearchParams(location.search).get('id');
+let me = null, current = null, hls = null;
+
+function showError(err) { $('error').textContent = err.message; }
+
+/** 방송 중이면 HLS 재생, 아니면 안내 문구. 상태가 바뀔 때만 다시 그린다. */
+function renderPlayer(b) {
+  if (current?.status === b.status && current?.hlsPath === b.hlsPath) return;
+  hls?.destroy(); hls = null;
+  if (b.status !== 'LIVE') {
+    $('player').replaceChildren(el('div', { className: 'placeholder' }, b.status === 'READY' ? '방송 시작 전입니다' : '종료된 방송입니다'));
+    return;
+  }
+  const video = el('video', { controls: true, autoplay: true, muted: true, playsInline: true });
+  $('player').replaceChildren(video);
+  const src = location.origin + b.hlsPath;
+  if (window.Hls && Hls.isSupported()) {
+    const play = () => {
+      hls = new Hls({ lowLatencyMode: true });
+      // 상태는 LIVE인데 아직 송출 영상이 안 들어왔으면 404 → 3초 뒤 다시
+      hls.on(Hls.Events.ERROR, (_, d) => { if (d.fatal) { hls.destroy(); setTimeout(play, 3000); } });
+      hls.loadSource(src);
+      hls.attachMedia(video);
+    };
+    play();
+  } else {
+    video.src = src; // Safari(iOS) 네이티브 HLS
+  }
+}
+
+function render(b) {
+  renderPlayer(b);
+  current = b;
+  document.title = b.title;
+  $('title').textContent = b.title;
+  $('status').replaceChildren(statusBadge(b.status));
+  $('owner').textContent = `방송자 ${b.ownerUsername ?? '알 수 없음'}`;
+  $('description').textContent = b.description ?? '';
+
+  const mine = me && me.id === b.ownerId;
+  $('manage').hidden = !mine;
+  if (!mine) return;
+  $('stream-key').textContent = b.streamKey;
+  $('publish-link').href = `publish.html?key=${encodeURIComponent(b.streamKey)}`;
+  $('start').disabled = b.status !== 'READY';
+  $('stop').disabled = b.status !== 'LIVE';
+  const form = $('edit');
+  if (document.activeElement?.form !== form) { // 입력 중인 값은 덮어쓰지 않는다
+    form.elements.title.value = b.title; // form.title은 폼 자신의 title 속성이라 elements로
+    form.elements.description.value = b.description ?? '';
+  }
+}
+
+async function load() {
+  try { render(await api(`/api/broadcasts/${encodeURIComponent(id)}`)); $('error').textContent = ''; }
+  catch (err) { showError(err.status === 404 ? new Error('없는 방송입니다.') : err); }
+}
+
+const act = (fn) => async () => { try { render(await fn()); } catch (err) { showError(err); } };
+$('start').onclick = act(() => api(`/api/broadcasts/${id}/start`, { method: 'POST' }));
+$('stop').onclick = act(() => api(`/api/broadcasts/${id}/stop`, { method: 'POST' }));
+$('edit').onsubmit = (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  act(() => api(`/api/broadcasts/${id}`, { method: 'PATCH', body: { title: f.get('title'), description: f.get('description') || null } }))();
+};
+$('delete').onclick = async () => {
+  if (!confirm('이 방송을 삭제할까요? 되돌릴 수 없습니다.')) return;
+  try { await api(`/api/broadcasts/${id}`, { method: 'DELETE' }); location.href = 'index.html'; } catch (err) { showError(err); }
+};
+
+renderNav().then((u) => { me = u; return load(); });
+setInterval(load, 5000); // 방송 시작·종료를 시청자 화면에 반영
+</script>
+</body>
+</html>

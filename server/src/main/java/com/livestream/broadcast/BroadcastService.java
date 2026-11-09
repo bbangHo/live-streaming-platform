@@ -14,9 +14,10 @@ public class BroadcastService {
         this.broadcasts = broadcasts;
     }
 
+    /** status가 null이면 전체. */
     @Transactional(readOnly = true)
-    public List<Broadcast> list() {
-        return broadcasts.findAllByOrderByIdDesc();
+    public List<Broadcast> list(Broadcast.Status status) {
+        return status == null ? broadcasts.findAllByOrderByIdDesc() : broadcasts.findAllByStatusOrderByIdDesc(status);
     }
 
     @Transactional(readOnly = true)
@@ -26,14 +27,14 @@ public class BroadcastService {
     }
 
     @Transactional
-    public Broadcast create(Long userId, String title) {
-        return broadcasts.save(new Broadcast(userId, title));
+    public Broadcast create(Long userId, String title, String description) {
+        return broadcasts.save(new Broadcast(userId, title, description));
     }
 
     @Transactional
-    public Broadcast rename(Long userId, Long id, String title) {
+    public Broadcast update(Long userId, Long id, String title, String description) {
         Broadcast b = requireOwner(userId, id);
-        b.rename(title);
+        b.update(title, description);
         return b;
     }
 
@@ -42,11 +43,18 @@ public class BroadcastService {
         broadcasts.delete(requireOwner(userId, id));
     }
 
-    /** 송출 제어(시작/종료). 실제 WHIP 연결 종료·MediaMTX 동기화는 D6~D8. */
+    /** 송출 제어. 실제 WHIP 연결 종료·MediaMTX 동기화는 D6~D8. */
     @Transactional
-    public Broadcast changeStatus(Long userId, Long id, Broadcast.Status status) {
+    public Broadcast start(Long userId, Long id) {
         Broadcast b = requireOwner(userId, id);
-        b.changeStatus(status);
+        b.start();
+        return b;
+    }
+
+    @Transactional
+    public Broadcast stop(Long userId, Long id) {
+        Broadcast b = requireOwner(userId, id);
+        b.stop();
         return b;
     }
 
