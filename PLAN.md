@@ -43,9 +43,9 @@
 ### 필수 — 방송 관리 및 시청
 | 체크리스트 | 구현 방법 | (계획) 위치 |
 |---|---|---|
-| 등록·조회·수정·삭제 | REST CRUD | `api/broadcasts` (controller/service) |
-| 목록·상세 + 다른 기기 수신·재생 | 목록/상세 페이지 + hls.js 플레이어(HLS URL) | `web/src/pages/broadcasts/*` |
-| 방송 중/종료 상태 관리 + 종료 시 송출 중단 | DB `status`(LIVE/ENDED) + stop 시 WHIP 종료 + (MediaMTX webhook로 동기화) | `broadcast.status`, `/stop`, webhook |
+| 등록·조회·수정·삭제 | REST CRUD + 화면 (D5 구현) | `GET·POST /api/broadcasts`, `GET·PATCH·DELETE /api/broadcasts/{id}` → [BroadcastController](server/src/main/java/com/livestream/broadcast/BroadcastController.java) · 화면 [index.html](web/index.html)(목록·만들기), [broadcast.html](web/broadcast.html)(상세·수정·삭제) |
+| 목록·상세 + 다른 기기 수신·재생 | 목록(전체/방송 중 탭)·상세 페이지 + hls.js 플레이어. HLS는 같은 출처 `/live/{streamKey}/index.m3u8`(nginx·Caddy → MediaMTX) | [index.html](web/index.html), [broadcast.html](web/broadcast.html), [media/nginx.conf](media/nginx.conf) — 다른 기기 실재생은 D9 |
+| 방송 중/종료 상태 관리 + 종료 시 송출 중단 | DB `status` READY→LIVE→ENDED(역행 409, [Broadcast.start/stop](server/src/main/java/com/livestream/broadcast/Broadcast.java)) + stop 시 WHIP 종료 + (MediaMTX webhook로 동기화) | 상태 API는 D5 완료. 송출 페이지 연동·webhook은 D6~D8 |
 | **영구 저장 + 재시작 후 조회** | PostgreSQL 저장 (인메모리 금지), compose `pgdata` 볼륨 | `broadcasts` 테이블 ([V1__init.sql](server/src/main/resources/db/migration/V1__init.sql)) — D3에서 `down`→`up` 후 조회 수동 확인 |
 
 ### 필수 — 사용자 인증 및 인가

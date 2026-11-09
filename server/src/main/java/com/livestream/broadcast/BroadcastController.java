@@ -1,10 +1,15 @@
 package com.livestream.broadcast;
 
+import com.livestream.user.User;
+import com.livestream.user.UserRepository;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -14,39 +19,47 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/broadcasts")
 public class BroadcastController {
     private final BroadcastService service;
+    private final UserRepository users;
 
-    public BroadcastController(BroadcastService service) {
+    public BroadcastController(BroadcastService service, UserRepository users) {
         this.service = service;
+        this.users = users;
     }
 
-    public record TitleRequest(@NotBlank @Size(max = 100) String title) {}
+    public record BroadcastRequest(@NotBlank @Size(max = 100) String title, @Size(max = 1000) String description) {}
 
-    public record BroadcastResponse(Long id, Long ownerId, String title, Broadcast.Status status, Instant createdAt) {
-        static BroadcastResponse of(Broadcast b) {
-            return new BroadcastResponse(b.getId(), b.getOwnerId(), b.getTitle(), b.getStatus(), b.getCreatedAt());
+    /** hlsPath: 같은 출처 기준 시청 주소(nginx·Caddy가 /live/ 를 MediaMTX로 넘긴다). */
+    public record BroadcastResponse(Long id, Long ownerId, String ownerUsername, String title, String description,
+                                    Broadcast.Status status, String streamKey, String hlsPath, Instant createdAt) {
+        static BroadcastResponse of(Broadcast b, String ownerUsername) {
+            return new BroadcastResponse(b.getId(), b.getOwnerId(), ownerUsername, b.getTitle(), b.getDescription(),
+                    b.getStatus(), b.getStreamKey(), "/live/" + b.getStreamKey() + "/index.m3u8", b.getCreatedAt());
         }
     }
 
     @GetMapping
-    public List<BroadcastResponse> list() {
-        return service.list().stream().map(BroadcastResponse::of).toList();
+    public List<BroadcastResponse> list(@RequestParam(required = false) Broadcast.Status status) {
+        List<Broadcast> list = service.list(status);
+        Map<Long, String> names = users.findAllById(list.stream().map(Broadcast::getOwnerId).distinct().toList())
+                .stream().collect(Collectors.toMap(User::getId, User::getUsername));
+        return list.stream().map(b -> BroadcastResponse.of(b, names.get(b.getOwnerId()))).toList();
     }
 
     @GetMapping("/{id}")
     public BroadcastResponse get(@PathVariable Long id) {
-        return BroadcastResponse.of(service.get(id));
+        return toResponse(service.get(id));
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public BroadcastResponse create(@AuthenticationPrincipal Long userId, @Valid @RequestBody TitleRequest req) {
-        return BroadcastResponse.of(service.create(userId, req.title()));
+    public BroadcastResponse create(@AuthenticationPrincipal Long userId, @Valid @RequestBody BroadcastRequest req) {
+        return toResponse(service.create(userId, req.title(), req.description()));
     }
 
     @PatchMapping("/{id}")
-    public BroadcastResponse rename(@AuthenticationPrincipal Long userId, @PathVariable Long id,
-                                    @Valid @RequestBody TitleRequest req) {
-        return BroadcastResponse.of(service.rename(userId, id, req.title()));
+    public BroadcastResponse update(@AuthenticationPrincipal Long userId, @PathVariable Long id,
+                                    @Valid @RequestBody BroadcastRequest req) {
+        return toResponse(service.update(userId, id, req.title(), req.description()));
     }
 
     @DeleteMapping("/{id}")
@@ -57,11 +70,15 @@ public class BroadcastController {
 
     @PostMapping("/{id}/start")
     public BroadcastResponse start(@AuthenticationPrincipal Long userId, @PathVariable Long id) {
-        return BroadcastResponse.of(service.changeStatus(userId, id, Broadcast.Status.LIVE));
+        return toResponse(service.start(userId, id));
     }
 
     @PostMapping("/{id}/stop")
     public BroadcastResponse stop(@AuthenticationPrincipal Long userId, @PathVariable Long id) {
-        return BroadcastResponse.of(service.changeStatus(userId, id, Broadcast.Status.ENDED));
+        return toResponse(service.stop(userId, id));
+    }
+
+    private BroadcastResponse toResponse(Broadcast b) {
+        return BroadcastResponse.of(b, users.findById(b.getOwnerId()).map(User::getUsername).orElse(null));
     }
 }

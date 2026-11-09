@@ -3,7 +3,7 @@
 치지직 같은 실시간 라이브 방송 송출·시청 웹 서비스. (Codemit 공모전 제출작)
 
 > 상태: **개발 중** · 마감 2026-11-19 23:59 · 평가 기준·계획은 [PLAN.md](./PLAN.md) 참고
-> 현재 구현: 브라우저 화면 송출(WHIP) → MediaMTX → HLS 시청, 백엔드 회원가입·로그인(JWT)·소유자 인가(API). 방송 관리 화면·모바일 송출은 개발 중.
+> 현재 구현: 브라우저 화면 송출(WHIP) → MediaMTX → HLS 시청, 회원가입·로그인(JWT)·소유자 인가, 방송 등록·목록·상세(시청)·수정·삭제 화면. 송출 페이지와 방송 상태 자동 연동·모바일 송출은 개발 중.
 
 ---
 
@@ -31,6 +31,7 @@ docker compose up -d
 ```
 | 주소 | 용도 |
 |---|---|
+| **http://localhost:8000/** | **방송 목록** (여기서 시작) — 로그인·방송 만들기·상세(시청)·관리 |
 | http://localhost:8000/publish.html | 송출 페이지 |
 | http://localhost:8000/watch.html | 시청 페이지 |
 | `:8889` / `:8888` / `:8189` (UDP·TCP) | MediaMTX — WHIP / HLS / WebRTC 미디어 |
@@ -64,6 +65,13 @@ python -m http.server 8000 --bind 127.0.0.1 -d web
 
 ## 기능 확인
 
+### 방송 관리 (화면)
+1. http://localhost:8000/ → 우측 상단 **로그인** → 테스트 계정 `demo1` / `demo1234` (또는 회원가입).
+2. **방송 만들기**에 제목·설명 입력 → 상세 페이지로 이동. 소유자에게만 **방송 관리**(시작·종료·삭제·수정, 스트림 키, 송출 페이지 링크)가 보입니다.
+3. **송출 페이지 열기** → 스트림 키가 채워진 송출 페이지에서 **방송 시작**(아래 PC 송출 절차) → 상세 페이지에서 **방송 시작**을 누르면 상태가 `방송 중`이 되고, 비로그인 시청자도 상세 페이지에서 영상이 재생됩니다. (송출 페이지 ↔ 방송 상태 자동 연동은 D6)
+4. 로그아웃하거나 `demo2`로 로그인해 같은 방송을 열면 관리 영역이 없고, API로 직접 바꿔도 401/403입니다.
+5. `docker compose restart` 또는 `down` → `up` 후에도 방송이 그대로 조회됩니다(PostgreSQL 볼륨).
+
 ### PC 송출 → 시청 → 종료
 1. 소리가 나는 탭을 하나 띄웁니다 (예: 유튜브).
 2. **송출:** http://localhost:8000/publish.html → 스트림 키(기본 `test`) → **방송 시작** → 공유 창에서 그 탭 선택 + **「오디오 공유」 켜기** → 마이크 허용.
@@ -83,7 +91,7 @@ docker compose --profile https up -d   # → https://<PC LAN IP>/  (사설 인�
 ```
 
 ### 인증·인가 확인 (API)
-화면은 D5~에서 붙습니다. 지금은 API로 확인합니다 (Git Bash / macOS / Linux 기준):
+화면 대신 API로도 확인할 수 있습니다 (Git Bash / macOS / Linux 기준):
 ```bash
 B=http://localhost:8080/api
 # 1) 비로그인: 목록 조회는 200, 등록은 401
@@ -102,10 +110,10 @@ curl -i -X PATCH $B/broadcasts/1 -H "Authorization: Bearer <demo2 accessToken>" 
 | `POST /api/auth/refresh` | 공개 | `{refreshToken}` → 새 토큰 쌍. 쓴 refresh token은 폐기(회전) |
 | `POST /api/auth/logout` | 공개 | `{refreshToken}` 폐기 → 204. access token은 남은 수명(15분)까지만 유효 |
 | `GET /api/auth/me` | 로그인 | 내 정보 |
-| `GET /api/broadcasts`, `GET /api/broadcasts/{id}` | 공개 | 방송 목록·상세 |
-| `POST /api/broadcasts` | 로그인 | `{title}` 방송 등록 (등록자 = 소유자) |
-| `PATCH /api/broadcasts/{id}`, `DELETE /api/broadcasts/{id}` | **소유자** | 수정·삭제. 타인 403, 비로그인 401 |
-| `POST /api/broadcasts/{id}/start`, `/stop` | **소유자** | 송출 상태 LIVE / ENDED |
+| `GET /api/broadcasts[?status=LIVE]`, `GET /api/broadcasts/{id}` | 공개 | 방송 목록(최신순, 상태 필터)·상세. 응답에 방송자·스트림 키·`hlsPath`(시청 주소) |
+| `POST /api/broadcasts` | 로그인 | `{title, description?}` 방송 등록 (등록자 = 소유자, 스트림 키 자동 발급) |
+| `PATCH /api/broadcasts/{id}`, `DELETE /api/broadcasts/{id}` | **소유자** | `{title, description?}` 수정 · 삭제. 타인 403, 비로그인 401 |
+| `POST /api/broadcasts/{id}/start`, `/stop` | **소유자** | 상태 `READY → LIVE → ENDED` 한 방향만. 순서가 틀리면 409 |
 
 인가는 전부 서버에서 합니다: 로그인 여부는 [SecurityConfig](./server/src/main/java/com/livestream/config/SecurityConfig.java), 소유자는 [BroadcastService.requireOwner](./server/src/main/java/com/livestream/broadcast/BroadcastService.java). 오류 응답은 `{"status":403,"detail":"..."}` 형식(RFC 9457).
 
@@ -115,7 +123,7 @@ cd server
 ./gradlew test
 ```
 - JDK 21 + **Docker 필요** (Testcontainers가 실제 PostgreSQL을 띄워 Flyway 스키마로 돌립니다).
-- 검증 범위: 가입·로그인·내정보·재발급(회전)·로그아웃, 중복 아이디 409, 잘못된 입력 400, 틀린 비번/없는 아이디 401, 위조·만료 토큰 거부, 테스트 계정 로그인, 방송 인가 **비로그인 401 / 타인 403(데이터 불변) / 소유자 허용**.
+- 검증 범위: 가입·로그인·내정보·재발급(회전)·로그아웃, 중복 아이디 409, 잘못된 입력 400, 틀린 비번/없는 아이디 401, 위조·만료 토큰 거부, 테스트 계정 로그인, 방송 인가 **비로그인 401 / 타인 403(데이터 불변) / 소유자 허용**, 방송 등록(스트림 키·HLS 주소)·수정·상태 필터·상태 전이 409·입력 검증 400.
 - ⚠️ Windows에서 프로젝트 경로에 **한글**이 있으면 Gradle 테스트 워커가 `ClassNotFoundException`으로 실패합니다. 영문 경로에 두거나 `./gradlew test -Dorg.gradle.jvmargs=-Dfile.encoding=MS949`로 실행하세요.
 
 ### 자동 E2E 테스트
@@ -127,6 +135,7 @@ npm run test:e2e
 - `docker compose up -d` 상태면 그 스택을 쓰고, 아니면 MediaMTX 바이너리·python 서버를 직접 띄웁니다.
 - 테스트 중 스피커에서 삐 소리가 납니다.
 - 다른 주소 대상: `E2E_BASE=https://<도메인> npm run test:e2e`
+- `tests/broadcast-crud.spec.js`: **화면으로** 가입 → 방송 만들기 → 수정 → 시작/종료(목록 '방송 중' 탭) → 비로그인·`demo2` 화면에 관리 영역 없음 + API 직접 호출 401/403 → 소유자 삭제. `docker compose up -d` 상태에서만 돌고, 백엔드가 없으면 건너뜁니다.
 
 자세한 검증 범위와 한계: [docs/spike-d1-streaming.md](./docs/spike-d1-streaming.md)
 

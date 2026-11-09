@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>로그인</title>
+<link rel="stylesheet" href="style.css">
+<script src="app.js"></script>
+</head>
+<body>
+<nav id="nav"></nav>
+<main style="max-width: 420px">
+  <section class="card">
+    <h2>로그인</h2>
+    <form id="login">
+      <input name="username" placeholder="아이디" autocomplete="username" required>
+      <input name="password" type="password" placeholder="비밀번호" autocomplete="current-password" required>
+      <button class="primary">로그인</button>
+      <p class="error" id="login-error"></p>
+    </form>
+    <p class="muted">테스트 계정: <code>demo1</code> / <code>demo1234</code>, <code>demo2</code> / <code>demo1234</code></p>
+  </section>
+
+  <section class="card" style="margin-top: 16px">
+    <h2>회원가입</h2>
+    <form id="signup">
+      <input name="username" placeholder="아이디 (영문·숫자·_ 3~30자)" pattern="[a-zA-Z0-9_]{3,30}" autocomplete="username" required>
+      <input name="password" type="password" placeholder="비밀번호 (8~72자)" minlength="8" maxlength="72" autocomplete="new-password" required>
+      <button>가입하고 로그인</button>
+      <p class="error" id="signup-error"></p>
+    </form>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+function goNext() {
+  const next = new URLSearchParams(location.search).get('next');
+  // 같은 사이트 상대 경로만 허용 (오픈 리다이렉트 방지)
+  location.href = next && /^[a-zA-Z0-9_.-]+\.html(\?[^#]*)?$/.test(next) ? next : 'index.html';
+}
+
+async function login(username, password) {
+  tokens.set(await api('/api/auth/login', { method: 'POST', body: { username, password } }));
+  goNext();
+}
+
+$('login').onsubmit = async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  try { await login(f.get('username'), f.get('password')); } catch (err) { $('login-error').textContent = err.message; }
+};
+
+$('signup').onsubmit = async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  try {
+    await api('/api/auth/signup', { method: 'POST', body: { username: f.get('username'), password: f.get('password') } });
+    await login(f.get('username'), f.get('password'));
+  } catch (err) { $('signup-error').textContent = err.status === 409 ? '이미 사용 중인 아이디입니다.' : err.message; }
+};
+
+renderNav();
+</script>
+</body>
+</html>

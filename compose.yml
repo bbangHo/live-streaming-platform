@@ -50,8 +50,10 @@ services:
   web:
     image: nginx:1.27-alpine
     restart: unless-stopped
+    depends_on: [backend, mediamtx]   # nginx는 기동 때 upstream 이름을 찾으므로 먼저 떠 있어야 함
     volumes:
       - ./web:/usr/share/nginx/html:ro
+      - ./media/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
       - "${WEB_PORT:-8000}:80"
 
@@ -60,7 +62,7 @@ services:
     image: caddy:2.10-alpine
     profiles: [https]
     restart: unless-stopped
-    depends_on: [mediamtx]
+    depends_on: [mediamtx, backend]
     environment:
       DOMAIN: ${DOMAIN:-localhost}
     ports:
