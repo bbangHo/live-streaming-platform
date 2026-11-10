@@ -10,6 +10,9 @@ services:
       # 브라우저에 알려 줄 WebRTC(ICE) 주소. 같은 PC면 127.0.0.1, 다른 기기에서 붙으면 PC의 LAN IP
       MTX_WEBRTCADDITIONALHOSTS: ${PUBLIC_HOST:-127.0.0.1}
       MTX_WEBRTCLOCALTCPADDRESS: :8189   # UDP가 막힌 망용 TCP 대체 경로
+      # 송출 인가: WHIP마다 백엔드에 물어 방송 소유자(Bearer 토큰)만 허용. 시청은 공개
+      MTX_AUTHMETHOD: http
+      MTX_AUTHHTTPADDRESS: http://backend:8080/internal/media-auth
     ports:
       - "8888:8888"        # HLS 시청
       - "8889:8889"        # WHIP 송출 / WHEP

@@ -43,7 +43,7 @@ public class BroadcastService {
         broadcasts.delete(requireOwner(userId, id));
     }
 
-    /** 송출 제어. 실제 WHIP 연결 종료·MediaMTX 동기화는 D6~D8. */
+    /** 상태 전이만 한다. WHIP 연결·끊기는 송출 페이지(publish.html)가 이 호출과 묶어서 한다. */
     @Transactional
     public Broadcast start(Long userId, Long id) {
         Broadcast b = requireOwner(userId, id);
@@ -56,6 +56,14 @@ public class BroadcastService {
         Broadcast b = requireOwner(userId, id);
         b.stop();
         return b;
+    }
+
+    /** MediaMTX 송출(WHIP) 인가: 그 스트림 키 방송의 소유자이고, 아직 끝나지 않은 방송(READY·LIVE)이어야 한다. */
+    @Transactional(readOnly = true)
+    public boolean canPublish(Long userId, String streamKey) {
+        return broadcasts.findByStreamKey(streamKey)
+                .filter(b -> b.isOwnedBy(userId) && b.getStatus() != Broadcast.Status.ENDED)
+                .isPresent();
     }
 
     /** 소유자 인가: 변경 메서드는 모두 여기를 거친다. 프론트가 버튼을 숨겨도 서버에서 다시 확인한다. */
