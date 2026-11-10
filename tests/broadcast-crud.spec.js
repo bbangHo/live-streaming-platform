@@ -1,5 +1,5 @@
 // @ts-check
-// 화면으로 하는 방송 관리 E2E: 가입 → 방송 만들기 → 목록·상세 → 수정 → 시작/종료 → 타인·비로그인 화면과 서버 거부 → 삭제
+// 화면으로 하는 방송 관리 E2E: 가입 → 방송 만들기 → 목록·상세 → 수정 → (API로 시작)/화면에서 종료 → 타인·비로그인 화면과 서버 거부 → 삭제
 // 백엔드가 필요하므로 `docker compose up -d` 상태(http://localhost:8000)에서 돈다. 백엔드가 없으면 건너뛴다.
 const { test, expect } = require('@playwright/test');
 
@@ -44,8 +44,11 @@ test('방송 관리: 소유자만 화면·서버 모두 변경 가능', async ({
   await page.getByRole('button', { name: '수정 저장' }).click();
   await expect(page.locator('#title')).toHaveText(`${title} (수정)`);
 
-  // 시작 → 목록 '방송 중' 탭에 보임 → 종료
-  await page.getByRole('button', { name: '방송 시작' }).click();
+  // 시작은 송출 페이지 몫(화면 공유 + 상태, broadcast-loop.spec.js). 여기선 상태 API로만 시작 → 목록 '방송 중' 탭 → 상세에서 종료
+  await expect(page.locator('#publish-link')).toHaveAttribute('href', `publish.html?id=${id}`);
+  const ownerToken = await page.evaluate(() => JSON.parse(localStorage.getItem('ls.tokens')).accessToken);
+  expect((await request.post(`${BASE}/api/broadcasts/${id}/start`, { headers: { Authorization: `Bearer ${ownerToken}` } })).status()).toBe(200);
+  await page.reload();
   await expect(page.locator('#status')).toHaveText('방송 중');
   await page.goto(`${BASE}/index.html`);
   await page.getByRole('button', { name: '방송 중' }).click();

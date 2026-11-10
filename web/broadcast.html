@@ -20,9 +20,10 @@
   <!-- 소유자에게만 보인다. 버튼을 숨기는 건 편의일 뿐, 권한은 서버가 매 요청마다 다시 확인한다(타인 403) -->
   <section id="manage" class="card" hidden>
     <h2>방송 관리</h2>
-    <p class="muted">스트림 키 <code id="stream-key"></code> · <a id="publish-link" target="_blank">송출 페이지 열기</a></p>
+    <p class="muted">스트림 키 <code id="stream-key"></code></p>
     <div class="row">
-      <button id="start" class="primary">방송 시작</button>
+      <!-- 시작은 송출 페이지에서: 화면 공유(WHIP) 연결과 상태 READY→LIVE를 함께 한다 -->
+      <a id="publish-link" class="button primary" target="_blank">송출 페이지에서 방송 시작</a>
       <button id="stop">방송 종료</button>
       <button id="delete" class="danger">삭제</button>
     </div>
@@ -79,8 +80,8 @@ function render(b) {
   $('manage').hidden = !mine;
   if (!mine) return;
   $('stream-key').textContent = b.streamKey;
-  $('publish-link').href = `publish.html?key=${encodeURIComponent(b.streamKey)}`;
-  $('start').disabled = b.status !== 'READY';
+  $('publish-link').href = `publish.html?id=${b.id}`;
+  $('publish-link').hidden = b.status === 'ENDED';
   $('stop').disabled = b.status !== 'LIVE';
   const form = $('edit');
   if (document.activeElement?.form !== form) { // 입력 중인 값은 덮어쓰지 않는다
@@ -95,7 +96,7 @@ async function load() {
 }
 
 const act = (fn) => async () => { try { render(await fn()); } catch (err) { showError(err); } };
-$('start').onclick = act(() => api(`/api/broadcasts/${id}/start`, { method: 'POST' }));
+// 송출 페이지가 열려 있으면 5초 안에 상태 변화를 보고 송출(WHIP)도 끊는다
 $('stop').onclick = act(() => api(`/api/broadcasts/${id}/stop`, { method: 'POST' }));
 $('edit').onsubmit = (e) => {
   e.preventDefault();

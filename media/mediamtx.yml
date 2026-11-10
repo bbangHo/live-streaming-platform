@@ -29,6 +29,7 @@ hlsSegmentDuration: 1s
 hlsPartDuration: 200ms
 hlsAlwaysRemux: yes          # 첫 시청자도 바로 재생되게 송출 시작부터 HLS 생성
 
-# 경로: live/<stream>. 스트림 키 인증은 D3(인증) 단계에서 authHTTPAddress로 붙인다.
+# 경로: live/<streamKey>. 송출 인가(authHTTPAddress → 백엔드)는 compose.yml 환경변수로 켠다
+# (이 파일만으로 mediamtx.exe를 단독 실행하면 인가 없음 — 백엔드 없이 미디어만 볼 때용)
 paths:
   "~^live/[A-Za-z0-9_-]+$":

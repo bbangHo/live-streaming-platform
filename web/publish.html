@@ -3,37 +3,66 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>송출 (D1 스파이크)</title>
+<title>방송 송출</title>
+<link rel="stylesheet" href="style.css">
+<script src="app.js"></script>
 <style>
-  body { font-family: system-ui, sans-serif; max-width: 860px; margin: 24px auto; padding: 0 16px; }
-  video { width: 100%; background: #000; aspect-ratio: 16/9; }
-  label, button { margin-right: 8px; }
-  #log { white-space: pre-wrap; font: 12px monospace; background: #f4f4f4; padding: 8px; min-height: 4em; }
+  #log { white-space: pre-wrap; font: 12px monospace; background: var(--card); padding: 8px; min-height: 4em; border-radius: 6px; }
+  select { font: inherit; padding: 8px; border: 1px solid var(--line); border-radius: 6px; min-width: 240px; }
 </style>
 </head>
 <body>
-<h1>브라우저 송출 (WHIP)</h1>
-<p>
-  <label>MediaMTX <input id="server" size="24"></label>
-  <label>스트림 키 <input id="key" value="test" size="10"></label>
-</p>
-<p>
-  <button id="start">방송 시작</button>
-  <button id="stop" disabled>방송 종료</button>
-  <span id="state">대기</span>
-</p>
-<video id="preview" autoplay muted playsinline></video>
-<div id="log"></div>
+<nav id="nav"></nav>
+<main>
+  <h1>방송 송출</h1>
+  <!-- 내 방송(대기·방송 중)만 고를 수 있다. 송출 권한은 MediaMTX가 백엔드에 다시 물어 확인한다(소유자 토큰만 허용) -->
+  <section class="card">
+    <div class="row">
+      <select id="broadcast" aria-label="송출할 방송"></select>
+      <a id="view" target="_blank">시청 페이지</a>
+    </div>
+    <form id="create" class="row" style="margin-top: 8px; display: flex">
+      <input name="title" placeholder="새 방송 제목" maxlength="100" required style="flex: 1; width: auto">
+      <button>새 방송 만들기</button>
+    </form>
+  </section>
+  <p class="row">
+    <button id="start" class="primary">방송 시작</button>
+    <button id="stop" disabled>방송 종료</button>
+    <span id="state">대기</span>
+  </p>
+  <p class="error" id="error"></p>
+  <video id="preview" autoplay muted playsinline></video>
+  <div id="log"></div>
+</main>
 
 <script>
 const $ = (id) => document.getElementById(id);
 // http(로컬 실행)면 이 페이지를 연 호스트의 MediaMTX 포트로, https(Caddy)면 같은 출처로
-const qk = new URLSearchParams(location.search).get('key'); // 방송 상세 → 「송출 페이지」 링크로 오면 스트림 키 채움
-if (qk) $('key').value = qk;
-$('server').value = location.protocol === 'https:' ? location.origin : `http://${location.hostname || 'localhost'}:8889`;
+const WHIP_BASE = location.protocol === 'https:' ? location.origin : `http://${location.hostname || 'localhost'}:8889`;
 const log = (m) => { $('log').textContent += new Date().toLocaleTimeString() + ' ' + m + '\n'; };
-if (location.protocol === 'file:') log('⚠ file://로 열면 송출이 안 됩니다(CORS). docker compose up -d 후 http://localhost:8000/publish.html 로 여세요.');
-let pc, sessionUrl, streams = [], audioCtx;
+let me, live = null; // live: 송출 중인 방송 {id, ...}
+let pc, sessionUrl, streams = [], audioCtx, poll;
+
+const selected = () => $('broadcast').value;
+
+/** 내 방송 중 아직 안 끝난 것(대기·방송 중)을 고르게 한다. */
+async function loadMine(selectId) {
+  // shortcut: 전체 목록을 받아 내 것만 거른다. 방송이 많아지면 서버에 ?owner=me 필터를 둔다
+  const mine = (await api('/api/broadcasts')).filter((b) => b.ownerId === me.id && b.status !== 'ENDED');
+  $('broadcast').replaceChildren(...mine.map((b) =>
+    el('option', { value: b.id, selected: String(b.id) === String(selectId) }, `${b.title} (${STATUS_LABEL[b.status]})`)));
+  if (!mine.length) $('broadcast').append(el('option', { value: '', disabled: true, selected: true }, '송출할 방송이 없습니다 — 새로 만드세요'));
+  syncButtons();
+}
+
+function syncButtons() {
+  $('start').disabled = !!live || !selected();
+  $('stop').disabled = !live;
+  $('broadcast').disabled = !!live;
+  $('view').hidden = !selected();
+  $('view').href = `broadcast.html?id=${encodeURIComponent(selected())}`;
+}
 
 // 화면(+탭/시스템 소리)과 마이크를 Web Audio로 한 트랙에 섞는다
 async function capture() {
@@ -57,46 +86,73 @@ async function capture() {
   return new MediaStream([video, dest.stream.getAudioTracks()[0]]);
 }
 
-async function start() {
-  $('start').disabled = true;
-  try {
-    const media = await capture();
-    $('preview').srcObject = media;
-
-    pc = new RTCPeerConnection();
-    pc.onconnectionstatechange = () => { $('state').textContent = pc.connectionState; log('연결 상태: ' + pc.connectionState); };
-    for (const track of media.getTracks()) {
-      const tr = pc.addTransceiver(track, { direction: 'sendonly' });
-      // HLS(fMP4)는 VP8을 못 담는다 → 영상은 H264 우선
-      if (track.kind === 'video') {
-        const codecs = RTCRtpSender.getCapabilities('video').codecs;
-        tr.setCodecPreferences([...codecs.filter(c => c.mimeType === 'video/H264'), ...codecs.filter(c => c.mimeType !== 'video/H264')]);
-      }
+/** WHIP 연결. 소유자 access token을 실어 보낸다 → MediaMTX가 백엔드(/internal/media-auth)에 물어 허용. */
+async function connectWhip(media, streamKey) {
+  pc = new RTCPeerConnection();
+  pc.onconnectionstatechange = () => { $('state').textContent = pc.connectionState; log('연결 상태: ' + pc.connectionState); };
+  for (const track of media.getTracks()) {
+    const tr = pc.addTransceiver(track, { direction: 'sendonly' });
+    // HLS(fMP4)는 VP8을 못 담는다 → 영상은 H264 우선
+    if (track.kind === 'video') {
+      const codecs = RTCRtpSender.getCapabilities('video').codecs;
+      tr.setCodecPreferences([...codecs.filter(c => c.mimeType === 'video/H264'), ...codecs.filter(c => c.mimeType !== 'video/H264')]);
     }
-
-    await pc.setLocalDescription(await pc.createOffer());
-    // shortcut: trickle ICE 없이 후보 수집이 끝난 뒤 한 번에 보낸다(로컬/공인IP면 충분), 연결이 느리면 trickle(PATCH)로 바꾼다
-    await new Promise((ok) => {
-      if (pc.iceGatheringState === 'complete') return ok();
-      pc.onicegatheringstatechange = () => pc.iceGatheringState === 'complete' && ok();
-      setTimeout(ok, 3000);
-    });
-
-    const url = `${$('server').value.replace(/\/$/, '')}/live/${encodeURIComponent($('key').value)}/whip`;
-    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/sdp' }, body: pc.localDescription.sdp });
-    if (res.status !== 201) throw new Error(`WHIP ${res.status}: ${await res.text()}`);
-    const loc = res.headers.get('Location');
-    sessionUrl = loc && new URL(loc, url).href;
-    await pc.setRemoteDescription({ type: 'answer', sdp: await res.text() });
-    log('WHIP 201, 세션: ' + (sessionUrl || '(Location 헤더 없음)'));
-    $('stop').disabled = false;
-  } catch (e) {
-    log('시작 실패: ' + e.message);
-    stop();
   }
+  await pc.setLocalDescription(await pc.createOffer());
+  // shortcut: trickle ICE 없이 후보 수집이 끝난 뒤 한 번에 보낸다(로컬/공인IP면 충분), 연결이 느리면 trickle(PATCH)로 바꾼다
+  await new Promise((ok) => {
+    if (pc.iceGatheringState === 'complete') return ok();
+    pc.onicegatheringstatechange = () => pc.iceGatheringState === 'complete' && ok();
+    setTimeout(ok, 3000);
+  });
+
+  if (!await currentUser()) throw new Error('로그인이 만료되었습니다. 다시 로그인하세요'); // access token이 만료됐으면 여기서 refresh
+  const url = `${WHIP_BASE}/live/${encodeURIComponent(streamKey)}/whip`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/sdp', Authorization: `Bearer ${tokens.get().accessToken}` },
+    body: pc.localDescription.sdp,
+  });
+  if (res.status === 401) throw new Error('송출 권한 없음 (방송 소유자만, 종료된 방송은 불가)');
+  if (res.status !== 201) throw new Error(`WHIP ${res.status}: ${await res.text()}`);
+  const loc = res.headers.get('Location');
+  sessionUrl = loc && new URL(loc, url).href;
+  await pc.setRemoteDescription({ type: 'answer', sdp: await res.text() });
+  log('WHIP 201, 세션: ' + (sessionUrl || '(Location 헤더 없음)'));
 }
 
-async function stop() {
+/** 방송 시작 = WHIP 송출 연결 + 상태 READY→LIVE. 되돌릴 수 있는 WHIP을 먼저 하고, 상태 전이는 마지막에. */
+async function start() {
+  $('error').textContent = '';
+  const id = selected();
+  $('start').disabled = true;
+  try {
+    let b = await api(`/api/broadcasts/${id}`);
+    const media = await capture();
+    $('preview').srcObject = media;
+    await connectWhip(media, b.streamKey);
+    if (b.status === 'READY') b = await api(`/api/broadcasts/${id}/start`, { method: 'POST' });
+    else log('이미 방송 중인 방송 — 송출만 다시 연결'); // 탭이 닫혔다가 다시 여는 경우
+    live = b;
+    log(`방송 시작: 「${b.title}」 상태 ${b.status}`);
+    poll = setInterval(watchStatus, 5000);
+  } catch (e) {
+    $('error').textContent = '시작 실패: ' + e.message;
+    log('시작 실패: ' + e.message);
+    teardown(); // WHIP·캡처 정리. 상태 전이는 마지막 단계라 실패했으면 READY 그대로
+  }
+  syncButtons();
+}
+
+/** 다른 화면(방송 상세의 「방송 종료」)에서 끝냈으면 송출도 끊는다. */
+async function watchStatus() {
+  const b = await api(`/api/broadcasts/${live.id}`).catch(() => null);
+  if (b && b.status !== 'LIVE') { log('방송이 다른 곳에서 종료됨 → 송출 중단'); live = null; teardown(); loadMine(); }
+}
+
+/** WHIP 세션·캡처 정리(상태는 건드리지 않음). */
+function teardown() {
+  clearInterval(poll);
   // WHIP 세션 DELETE → MediaMTX가 즉시 path를 닫는다
   if (sessionUrl) { fetch(sessionUrl, { method: 'DELETE' }).catch(() => {}); sessionUrl = null; }
   pc?.close(); pc = null;
@@ -104,12 +160,45 @@ async function stop() {
   audioCtx?.close(); audioCtx = null;
   $('preview').srcObject = null;
   $('state').textContent = '종료';
-  $('start').disabled = false; $('stop').disabled = true;
-  log('방송 종료');
 }
+
+/** 방송 종료 = WHIP 끊기 + 상태 LIVE→ENDED. */
+async function stop() {
+  const b = live;
+  live = null;
+  teardown();
+  if (b) {
+    try { await api(`/api/broadcasts/${b.id}/stop`, { method: 'POST' }); log('방송 종료 (상태 ENDED)'); }
+    catch (e) { $('error').textContent = '상태 종료 실패: ' + e.message; log('상태 종료 실패: ' + e.message); }
+  }
+  await loadMine();
+}
+
+// 송출 중에 탭을 닫으면: 페이지가 사라져도 끝까지 보내지는 keepalive 요청으로 WHIP·상태를 같이 끝낸다
+addEventListener('pagehide', () => {
+  if (!live) return;
+  if (sessionUrl) fetch(sessionUrl, { method: 'DELETE', keepalive: true });
+  fetch(`/api/broadcasts/${live.id}/stop`, { method: 'POST', keepalive: true, headers: { Authorization: `Bearer ${tokens.get()?.accessToken}` } });
+});
 
 $('start').onclick = start;
 $('stop').onclick = stop;
+$('broadcast').onchange = syncButtons;
+$('create').onsubmit = async (e) => {
+  e.preventDefault();
+  try {
+    const b = await api('/api/broadcasts', { method: 'POST', body: { title: new FormData(e.target).get('title') } });
+    e.target.reset();
+    await loadMine(b.id);
+  } catch (err) { $('error').textContent = err.message; }
+};
+
+if (location.protocol === 'file:') log('⚠ file://로 열면 송출이 안 됩니다(CORS). docker compose up -d 후 http://localhost:8000/publish.html 로 여세요.');
+renderNav().then(async (u) => {
+  if (!u) { location.href = `login.html?next=${encodeURIComponent('publish.html' + location.search)}`; return; }
+  me = u;
+  await loadMine(new URLSearchParams(location.search).get('id'));
+});
 </script>
 </body>
 </html>

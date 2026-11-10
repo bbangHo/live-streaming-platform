@@ -8,8 +8,10 @@ nav .spacer { flex: 1; }
 nav .me { color: var(--muted); }
 a { color: inherit; }
 button, input, textarea { font: inherit; }
-button { padding: 6px 12px; border: 1px solid var(--line); border-radius: 6px; background: #fff; cursor: pointer; }
-button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+[hidden] { display: none !important; }
+button, a.button { padding: 6px 12px; border: 1px solid var(--line); border-radius: 6px; background: #fff; cursor: pointer; }
+a.button { display: inline-block; text-decoration: none; color: inherit; }
+button.primary, a.button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 button.danger { color: var(--danger); border-color: var(--danger); }
 button.link { border: 0; background: none; text-decoration: underline; padding: 0; }
 button:disabled { opacity: .5; cursor: default; }

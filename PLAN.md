@@ -31,7 +31,7 @@
 | 화면 캡처 실시간 송출 | `getDisplayMedia()` → WHIP로 MediaMTX 송출 | `web/src/broadcast/pc/usePcStream.ts` |
 | 탭/시스템 소리 + 마이크 함께 | `getDisplayMedia({audio:true})` + `getUserMedia(audio)` → Web Audio로 믹싱 | 동上 |
 | 마이크 음성 송출 | 위 믹싱 트랙 포함 | 동上 |
-| 시작/종료 시 연결 생성·종료 | WHIP 세션 open/close + 서버에 상태 PATCH | `api/broadcasts/:id/start`·`/stop` |
+| 시작/종료 시 연결 생성·종료 | **(D6 구현)** 방송 시작 = 캡처 → WHIP 연결(소유자 토큰) → `POST /start`(실패 시 WHIP 정리, 상태는 READY 유지). 종료 = WHIP DELETE + `POST /stop`. 공유 중지·탭 닫기(keepalive)·상세에서 종료(5초 폴링)도 같이 끝남 | [publish.html](web/publish.html) — 실화면 공유 클릭은 수동확인 필요 |
 
 ### 필수 — 모바일 라이브 방송
 | 체크리스트 | 구현 방법 | (계획) 위치 |
@@ -45,7 +45,7 @@
 |---|---|---|
 | 등록·조회·수정·삭제 | REST CRUD + 화면 (D5 구현) | `GET·POST /api/broadcasts`, `GET·PATCH·DELETE /api/broadcasts/{id}` → [BroadcastController](server/src/main/java/com/livestream/broadcast/BroadcastController.java) · 화면 [index.html](web/index.html)(목록·만들기), [broadcast.html](web/broadcast.html)(상세·수정·삭제) |
 | 목록·상세 + 다른 기기 수신·재생 | 목록(전체/방송 중 탭)·상세 페이지 + hls.js 플레이어. HLS는 같은 출처 `/live/{streamKey}/index.m3u8`(nginx·Caddy → MediaMTX) | [index.html](web/index.html), [broadcast.html](web/broadcast.html), [media/nginx.conf](media/nginx.conf) — 다른 기기 실재생은 D9 |
-| 방송 중/종료 상태 관리 + 종료 시 송출 중단 | DB `status` READY→LIVE→ENDED(역행 409, [Broadcast.start/stop](server/src/main/java/com/livestream/broadcast/Broadcast.java)) + stop 시 WHIP 종료 + (MediaMTX webhook로 동기화) | 상태 API는 D5 완료. 송출 페이지 연동·webhook은 D6~D8 |
+| 방송 중/종료 상태 관리 + 종료 시 송출 중단 | DB `status` READY→LIVE→ENDED(역행 409, [Broadcast.start/stop](server/src/main/java/com/livestream/broadcast/Broadcast.java)) + 송출 페이지가 시작/종료를 WHIP과 묶음 + 종료된 방송은 송출 인가 거부 | D6 완료: [publish.html](web/publish.html), [MediaAuthController](server/src/main/java/com/livestream/broadcast/MediaAuthController.java), E2E [broadcast-loop.spec.js](tests/broadcast-loop.spec.js). 남은 일: 브라우저가 강제 종료돼 keepalive도 못 보내면 LIVE로 남음(MediaMTX runOnUnpublish 훅 미구현) |
 | **영구 저장 + 재시작 후 조회** | PostgreSQL 저장 (인메모리 금지), compose `pgdata` 볼륨 | `broadcasts` 테이블 ([V1__init.sql](server/src/main/resources/db/migration/V1__init.sql)) — D3에서 `down`→`up` 후 조회 수동 확인 |
 
 ### 필수 — 사용자 인증 및 인가
@@ -56,7 +56,7 @@
 | **수정·삭제·송출제어 시 서버에서 소유자 검증** | 모든 변경 메서드가 `requireOwner` 경유 → `broadcast.ownerId == 토큰의 사용자 id` 아니면 403 | `PATCH·DELETE /api/broadcasts/{id}`, `POST /api/broadcasts/{id}/start·stop` → [BroadcastService.requireOwner](server/src/main/java/com/livestream/broadcast/BroadcastService.java) |
 | (검증) 비로그인/소유자/타인 | 통합 테스트(실 PostgreSQL, Testcontainers) | [BroadcastAuthorizationTest](server/src/test/java/com/livestream/broadcast/BroadcastAuthorizationTest.java), [AuthFlowTest](server/src/test/java/com/livestream/auth/AuthFlowTest.java), [JwtProviderTest](server/src/test/java/com/livestream/auth/JwtProviderTest.java) |
 
-> 남은 일: WHIP 송출 자체(MediaMTX `:8889`)는 아직 누구나 가능 — MediaMTX `authHTTPAddress`로 백엔드가 송출 권한을 판정하게 묶는 건 D6~D8(송출 페이지 연동 때).
+> D6: WHIP 송출(MediaMTX `:8889`)도 소유자만 — MediaMTX `authHTTPAddress` → [MediaAuthController](server/src/main/java/com/livestream/broadcast/MediaAuthController.java)가 Bearer 토큰 소유자·종료 전 방송만 허용(타인·무토큰·종료 401). 테스트 [MediaAuthTest](server/src/test/java/com/livestream/broadcast/MediaAuthTest.java) + E2E.
 
 ### 선택 — 가산점 (효율순: 댓글 → 녹화 → 도네이션)
 | 체크리스트 | 구현 방법 | 비고 |
