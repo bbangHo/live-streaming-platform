@@ -79,3 +79,41 @@ test('방송 관리: 소유자만 화면·서버 모두 변경 가능', async ({
   await expect(page).toHaveURL(/index\.html$/);
   await expect(page.locator('#list')).not.toContainText(title);
 });
+
+test('댓글: 비로그인 조회, 로그인 작성, 작성자만 수정·삭제', async ({ browser, page, request }) => {
+  // demo1의 시연 방송(1번)에 demo2가 댓글
+  await login(page, 'demo2', 'demo1234');
+  await page.goto(`${BASE}/broadcast.html?id=1`);
+  const text = `E2E 댓글 ${Date.now()}`;
+  await page.getByPlaceholder(/댓글 쓰기/).fill(text);
+  await page.getByRole('button', { name: '등록' }).click();
+  const mine = page.locator('#comment-list li', { hasText: text });
+  await expect(mine).toContainText('demo2');
+
+  // 비로그인: 보이지만 입력창·수정 버튼 없음
+  const anon = await browser.newPage();
+  await anon.goto(`${BASE}/broadcast.html?id=1`);
+  await expect(anon.locator('#comment-list')).toContainText(text);
+  await expect(anon.locator('#comment-form')).toBeHidden();
+  await expect(anon.locator('#comment-list li', { hasText: text }).getByRole('button', { name: '수정' })).toHaveCount(0);
+
+  // 방송 소유자(demo1)도 남의 댓글은 못 고침: 버튼 없음 + API 403
+  const owner = await (await request.post(`${BASE}/api/auth/login`, { data: { username: 'demo1', password: 'demo1234' } })).json();
+  const list = await (await request.get(`${BASE}/api/broadcasts/1/comments`)).json();
+  const cid = list.find((c) => c.content === text).id;
+  expect((await request.patch(`${BASE}/api/comments/${cid}`, { headers: { Authorization: `Bearer ${owner.accessToken}` }, data: { content: 'x' } })).status()).toBe(403);
+  expect((await request.delete(`${BASE}/api/comments/${cid}`)).status()).toBe(401);
+
+  // 작성자: 수정 → (수정됨), 삭제 → 사라짐 (다른 화면에도 3초 안에 반영)
+  await mine.getByRole('button', { name: '수정' }).click();
+  await page.locator('#comment-list .editing input').fill(`${text} 고침`);
+  await page.getByRole('button', { name: '저장' }).click();
+  await expect(page.locator('#comment-list')).toContainText(`${text} 고침`);
+  await expect(page.locator('#comment-list li', { hasText: text })).toContainText('(수정됨)');
+  await expect(anon.locator('#comment-list')).toContainText(`${text} 고침`, { timeout: 5000 });
+  page.once('dialog', (d) => d.accept());
+  await page.locator('#comment-list li', { hasText: text }).getByRole('button', { name: '삭제' }).click();
+  await expect(page.locator('#comment-list')).not.toContainText(text);
+  await expect(anon.locator('#comment-list')).not.toContainText(text, { timeout: 5000 });
+  await anon.close();
+});

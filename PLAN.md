@@ -59,7 +59,7 @@
 ### 선택 — 가산점 (효율순: 댓글 → 녹화 → 도네이션)
 | 체크리스트 | 구현 방법 | 비고 |
 |---|---|---|
-| 댓글 작성/조회/수정/삭제 + 작성자 권한 | **REST CRUD** (실시간 불필요 — 루브릭이 요구 안 함) | 제일 쌈 |
+| 댓글 작성/조회/수정/삭제 + 작성자 권한 ✅ | REST CRUD, 화면은 3초 주기 갱신. 조회 공개 / 작성 로그인 / 수정·삭제 **작성자만**(방송 소유자도 남의 댓글 불가, 서버 403) | `GET·POST /api/broadcasts/{id}/comments`, `PATCH·DELETE /api/comments/{id}` → [CommentService.requireAuthor](server/src/main/java/com/livestream/comment/CommentService.java), 화면 [broadcast.html](web/broadcast.html), 테스트 [CommentTest](server/src/test/java/com/livestream/comment/CommentTest.java)·[broadcast-crud.spec.js](tests/broadcast-crud.spec.js) |
 | 녹화 저장 / 목록·상세·재생 / 위치 영구저장 | **MediaMTX record 옵션** → 파일 + DB에 경로 | MediaMTX로 거의 공짜 |
 | 도네이션: 테스트결제/서버검증/중복적립 방지/합계 | PG 테스트모드 + **멱등키**(중복 승인 1회만) + ledger | 멱등성 명시 채점 |
 
