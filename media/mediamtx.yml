@@ -41,9 +41,24 @@ hlsSegmentDuration: 1s
 hlsPartDuration: 200ms
 hlsAlwaysRemux: yes          # 첫 시청자도 바로 재생되게 송출 시작부터 HLS 생성
 
-# 같은 방송에 두 번째 송출이 들어오면 거부한다 (기본값은 나중 것이 앞의 송출을 밀어냄)
+# 녹화 재생 서버: /get?path=live/<키>&start=<시각>&duration=<초>&format=mp4 → mp4 한 파일로 내려준다.
+# nginx·Caddy가 /playback/ 으로 넘긴다. 재생(playback)은 시청과 같이 공개(authHTTPExclude)
+playback: yes
+playbackAddress: :9996
+playbackAllowOrigins: ['*']
+
 pathDefaults:
+  # 같은 방송에 두 번째 송출이 들어오면 거부한다 (기본값은 나중 것이 앞의 송출을 밀어냄)
   overridePublisher: no
+
+  # 녹화(선택 기능): 송출되는 모든 방송을 fMP4로 저장. 송출이 끊기거나 1시간마다 파일(세그먼트)이 하나씩 완성된다.
+  # 파일 이름 = 세그먼트 시작 시각(UTC) → 백엔드가 파싱해 재생 주소를 만든다. 자동 삭제 안 함(0s)
+  # compose는 MTX_PATHDEFAULTS_RECORDPATH로 /recordings 볼륨에 쓰고, 완성될 때 record-hook.sh로 백엔드에 위치를 알린다
+  record: yes
+  recordPath: ./recordings/%path/%Y-%m-%d_%H-%M-%S-%f%z
+  recordFormat: fmp4
+  recordSegmentDuration: 1h
+  recordDeleteAfter: 0s
 
 # 경로: live/<스트림 키>. 다른 경로는 받지 않는다
 paths:

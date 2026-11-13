@@ -3,7 +3,7 @@
 치지직 같은 실시간 라이브 방송 송출·시청 웹 서비스. (Codemit 공모전 제출작)
 
 > 상태: **개발 중** · 마감 2026-11-19 23:59 · 평가 기준·계획은 [PLAN.md](./PLAN.md) 참고
-> 현재 구현: 회원가입·로그인(JWT)·소유자 인가, 방송 등록·목록·상세(시청)·수정·삭제, **PC 화면 송출**(화면 + 탭/시스템 소리 + 마이크)·**모바일 카메라 송출**(WHIP) → MediaMTX → HLS 시청, **송출 권한 서버 검증**(방송 소유자 토큰만 송출 가능), **방송 상태 자동 연동**(송출이 들어오면 방송 중, 끊긴 채 30초면 종료). **댓글**(작성자만 수정·삭제). 선택 기능 녹화·도네이션은 개발 중.
+> 현재 구현: 회원가입·로그인(JWT)·소유자 인가, 방송 등록·목록·상세(시청)·수정·삭제, **PC 화면 송출**(화면 + 탭/시스템 소리 + 마이크)·**모바일 카메라 송출**(WHIP) → MediaMTX → HLS 시청, **송출 권한 서버 검증**(방송 소유자 토큰만 송출 가능), **방송 상태 자동 연동**(송출이 들어오면 방송 중, 끊긴 채 30초면 종료). **댓글**(작성자만 수정·삭제), **녹화·다시보기**(자동 녹화, 위치 DB 저장, 재생, 소유자 삭제). 선택 기능 도네이션은 개발 중.
 
 ---
 
@@ -32,12 +32,14 @@ docker compose up -d
 | 주소 | 용도 |
 |---|---|
 | **http://localhost:8000/** | **방송 목록** (여기서 시작) — 로그인·방송 만들기·상세(시청)·관리 |
+| http://localhost:8000/recordings.html | 다시보기(녹화) 목록 |
 | http://localhost:8000/publish-pc.html?id=… | PC 송출 (방송 상세 → 「PC 화면 송출」) |
 | http://localhost:8000/publish-mobile.html?id=… | 모바일 카메라 송출 (방송 상세 → 「모바일 카메라 송출」, 휴대폰은 HTTPS 필요) |
 | http://localhost:8000/dev-publish.html, dev-watch.html | 개발용: 스트림 키를 직접 넣는 송출·시청 (등록 안 된 키만, `STREAM_DEV_BYPASS=true`일 때) |
-| `:8889` / `:8888` / `:8189` (UDP·TCP) | MediaMTX — WHIP / HLS / WebRTC 미디어 |
+| `:8889` / `:8888` / `:8189` (UDP·TCP) | MediaMTX — WHIP / HLS / WebRTC 미디어 (녹화 재생 `:9996`은 내부망 전용, 페이지 주소 `/playback/`으로 접근) |
 | http://localhost:8080/api | 백엔드 API (Spring Boot) — 인증/인가, 방송 정보 |
 | (내부) postgres | DB. `pgdata` 볼륨에 저장 → 재시작·`down` 후에도 유지 (`down -v`만 삭제) |
+| (내부) 녹화 파일 | MediaMTX `recordings` 볼륨 `/recordings/live/<스트림 키>/<시작 시각>.mp4` (`down -v`만 삭제) |
 
 처음 실행은 백엔드 이미지 빌드(Gradle 의존성 내려받기) 때문에 몇 분 걸립니다.
 
@@ -83,6 +85,13 @@ python -m http.server 8000 --bind 127.0.0.1 -d web
 
 ### 댓글 (선택 기능)
 방송 상세 아래 **댓글**: 비로그인도 읽을 수 있고, 로그인하면 쓸 수 있습니다. 내 댓글에만 **수정·삭제**가 보이며(수정하면 「(수정됨)」), 남의 댓글은 방송 소유자라도 서버가 403으로 막습니다. 다른 시청자 화면에는 3초 안에 반영됩니다.
+
+### 녹화·다시보기 (선택 기능)
+1. 방송은 송출되는 동안 **자동으로 녹화**됩니다(MediaMTX, fMP4). 송출이 끝나면(또는 끊겼다 다시 붙거나 1시간마다) 녹화 파일이 하나 완성되고, MediaMTX가 백엔드에 알려 **파일 위치·시작 시각·길이가 DB에 저장**됩니다.
+2. 방송을 끝내고 몇 초 뒤 방송 상세의 **다시보기**, 또는 상단 메뉴 **다시보기**(전체 녹화 목록)에 나타납니다. 비로그인도 볼 수 있습니다.
+3. 녹화 상세에서 바로 재생·탐색되고, **저장 위치**(파일 경로)가 보입니다. `docker compose down` → `up` 후에도 목록·재생이 유지됩니다(DB·녹화 볼륨).
+4. **녹화 삭제**는 방송 소유자에게만 보이고(파일도 삭제), 타인은 API로 시도해도 403입니다.
+- 개발용 페이지(`dev-publish.html`)의 미등록 키 송출도 파일은 녹화되지만 DB에는 저장하지 않습니다(목록에 안 나옴).
 
 ### 모바일 송출 (카메라 + 마이크)
 휴대폰 브라우저는 `localhost`가 아니면 **HTTPS에서만** 카메라를 엽니다. 같은 와이파이의 PC에서 HTTPS 프로필로 띄웁니다:
@@ -132,6 +141,8 @@ curl -i -X POST http://localhost:8000/live/$KEY/whip -H 'Content-Type: applicati
 | `GET /api/broadcasts/{id}/comments[?after=<댓글 id>]` | 공개 | 댓글 목록(오래된 순, 최대 200개). `after`면 그 뒤 것만 |
 | `POST /api/broadcasts/{id}/comments` | 로그인 | `{content}` 댓글 작성 (1~500자) |
 | `PATCH /api/comments/{id}`, `DELETE /api/comments/{id}` | **작성자** | 댓글 수정·삭제. 타인(방송 소유자 포함) 403, 비로그인 401 |
+| `GET /api/recordings`, `GET /api/recordings/{id}`, `GET /api/broadcasts/{id}/recordings` | 공개 | 녹화 목록(최신순)·상세·방송별 목록. `filePath`(저장 위치), `startedAt`, `durationMs`, `playbackPath`(재생 주소) |
+| `DELETE /api/recordings/{id}` | **방송 소유자** | 녹화 삭제(파일 + DB). 타인 403 |
 | `POST /live/{streamKey}/whip` | **소유자** (Bearer) | WHIP 송출(MediaMTX). 토큰 없음·타인·종료된 방송 401, 같은 방송 두 번째 송출 거부 |
 
 인가는 전부 서버에서 합니다: 로그인 여부는 [SecurityConfig](./server/src/main/java/com/livestream/config/SecurityConfig.java), 소유자는 [BroadcastService.requireOwner](./server/src/main/java/com/livestream/broadcast/BroadcastService.java). 오류 응답은 `{"status":403,"detail":"..."}` 형식(RFC 9457).
@@ -142,7 +153,7 @@ cd server
 ./gradlew test
 ```
 - JDK 21 + **Docker 필요** (Testcontainers가 실제 PostgreSQL을 띄워 Flyway 스키마로 돌립니다).
-- 검증 범위: 가입·로그인·내정보·재발급(회전)·로그아웃, 중복 아이디 409, 잘못된 입력 400, 틀린 비번/없는 아이디 401, 위조·만료 토큰 거부, 테스트 계정 로그인, 방송 인가 **비로그인 401 / 타인 403(데이터 불변) / 소유자 허용**, 방송 등록(스트림 키·HLS 주소)·수정·상태 필터·상태 전이 409·입력 검증 400, **송출 인증**(소유자 토큰만 허용, 토큰 없음·위조·타인·종료된 방송·등록 안 된 키 거부, hook secret 불일치 403), **상태 동기화**(송출 들어오면 방송 중, 끊김 30초 유예·재접속 시 유지, 초과 시 종료, 종료된 방송의 송출 끊기), **댓글**(공개 조회·새 댓글만 조회, 로그인 작성, 작성자만 수정·삭제 — 타인·방송 소유자 403, 입력 검증, 방송 삭제 시 함께 삭제).
+- 검증 범위: 가입·로그인·내정보·재발급(회전)·로그아웃, 중복 아이디 409, 잘못된 입력 400, 틀린 비번/없는 아이디 401, 위조·만료 토큰 거부, 테스트 계정 로그인, 방송 인가 **비로그인 401 / 타인 403(데이터 불변) / 소유자 허용**, 방송 등록(스트림 키·HLS 주소)·수정·상태 필터·상태 전이 409·입력 검증 400, **송출 인증**(소유자 토큰만 허용, 토큰 없음·위조·타인·종료된 방송·등록 안 된 키 거부, hook secret 불일치 403), **상태 동기화**(송출 들어오면 방송 중, 끊김 30초 유예·재접속 시 유지, 초과 시 종료, 종료된 방송의 송출 끊기), **댓글**(공개 조회·새 댓글만 조회, 로그인 작성, 작성자만 수정·삭제 — 타인·방송 소유자 403, 입력 검증, 방송 삭제 시 함께 삭제), **녹화**(완료 알림 저장·중복 알림 1회만 저장·파일 이름에서 시작 시각, 미등록 키 무시, 비밀값 검증, 공개 목록·재생 주소, 삭제는 방송 소유자만).
 - ⚠️ Windows에서 프로젝트 경로에 **한글**이 있으면 Gradle 테스트 워커가 `ClassNotFoundException`으로 실패합니다. 영문 경로에 두거나 `./gradlew test -Dorg.gradle.jvmargs=-Dfile.encoding=MS949`로 실행하세요.
 
 ### 자동 E2E 테스트
@@ -155,7 +166,7 @@ npm run test:e2e
 - 테스트 중 스피커에서 삐 소리가 납니다.
 - 다른 주소 대상: `E2E_BASE=https://<도메인> npm run test:e2e`
 - `tests/broadcast-crud.spec.js`: **화면으로** 가입 → 방송 만들기 → 수정 → 송출 링크 → 비로그인·`demo2` 화면에 관리 영역 없음 + API 직접 호출 401/403 → 소유자 삭제. 댓글 작성 → 비로그인 조회 → 방송 소유자도 남의 댓글 403 → 작성자 수정·삭제가 다른 화면에 반영.
-- `tests/broadcast-publish.spec.js`: **PC 송출 페이지**에서 진짜 탭 캡처 송출 → 서버가 자동으로 방송 중 → 비로그인 시청자가 목록 '방송 중' 탭 → 상세에서 재생 → 토큰 없음·타인 토큰·두 번째 송출 거부 → 소유자 종료 → HLS 사라짐·시청 화면 종료 → 종료된 방송 재송출 거부. **모바일 송출 페이지**(가짜 카메라)로 송출 → 방송 중 → 종료. 비로그인·타인의 송출 페이지 접근 차단.
+- `tests/broadcast-publish.spec.js`: **PC 송출 페이지**에서 진짜 탭 캡처 송출 → 서버가 자동으로 방송 중 → 비로그인 시청자가 목록 '방송 중' 탭 → 상세에서 재생 → 토큰 없음·타인 토큰·두 번째 송출 거부 → 소유자 종료 → HLS 사라짐·시청 화면 종료 → 종료된 방송 재송출 거부. **모바일 송출 페이지**(가짜 카메라)로 송출 → 방송 중 → 종료 → 녹화가 상세 '다시보기'에 생김 → 비로그인이 다시보기 목록에서 재생 → 타인 삭제 403 → 소유자 삭제 시 파일까지 사라짐. 비로그인·타인의 송출 페이지 접근 차단.
 - 위 두 파일은 백엔드가 필요해 `docker compose up -d` 상태에서만 돌고, 없으면 건너뜁니다. `broadcast-loop.spec.js`는 개발용 페이지(`dev-publish.html`)로 소리 믹싱·지연을 숫자로 판정합니다.
 
 자세한 검증 범위와 한계: [docs/spike-d1-streaming.md](./docs/spike-d1-streaming.md)
@@ -172,7 +183,7 @@ npm run test:e2e
 
 ## 출처·라이선스
 
-- [MediaMTX](https://github.com/bluenviron/mediamtx) (MIT) — 미디어 서버, Docker 이미지·바이너리로 사용 (레포에 포함하지 않음)
+- [MediaMTX](https://github.com/bluenviron/mediamtx) (MIT) — 미디어 서버(송출·HLS·녹화·재생), Docker 이미지(`-ffmpeg` 변형: Alpine + FFmpeg(LGPL/GPL), 녹화 훅용 sh·wget)·바이너리로 사용 (레포에 포함하지 않음)
 - [hls.js](https://github.com/video-dev/hls.js) (Apache-2.0) — CDN으로 로드
 - [Caddy](https://caddyserver.com) (Apache-2.0), [nginx](https://nginx.org) (BSD-2) — Docker 이미지
 - [Playwright](https://playwright.dev) (Apache-2.0) — 개발 의존성

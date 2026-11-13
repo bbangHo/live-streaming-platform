@@ -46,3 +46,9 @@ a.button.primary { background: var(--accent); border-color: var(--accent); color
 .row.nowrap input { flex: 1; }
 #comments { margin: 16px 0; }
 h1 .badge { font-size: .5em; vertical-align: middle; }
+.plain { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+#recordings { margin: 16px 0; }
+dl.info { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 16px 0; }
+dl.info dt { color: var(--muted); }
+dl.info dd { margin: 0; overflow-wrap: anywhere; }
+nav a { text-decoration: none; }

@@ -17,6 +17,11 @@
   <p id="description" style="white-space: pre-wrap"></p>
   <p class="error" id="error"></p>
 
+  <section id="recordings" class="card" hidden>
+    <h2>다시보기</h2>
+    <ul id="recording-list" class="plain"></ul>
+  </section>
+
   <section id="comments" class="card">
     <h2>댓글 <span id="comment-count" class="muted"></span></h2>
     <ul id="comment-list" class="comments"></ul>
@@ -105,8 +110,23 @@ function render(b) {
   }
 }
 
+/** 이 방송의 녹화 파일들 (방송 중에도 끊겼다 다시 붙었으면 앞부분이 있다) */
+async function loadRecordings() {
+  try {
+    const list = await api(`/api/broadcasts/${encodeURIComponent(id)}/recordings`);
+    $('recordings').hidden = list.length === 0;
+    $('recording-list').replaceChildren(...list.map((r, i) => el('li', {},
+      el('a', { href: `recording.html?id=${r.id}` }, `▶ 녹화 ${i + 1}`),
+      el('span', { className: 'muted' }, ` ${new Date(r.startedAt).toLocaleString()} · ${formatDuration(r.durationMs)}`))));
+  } catch { /* 방송이 없으면 위의 오류 표시로 충분 */ }
+}
+
 async function load() {
-  try { render(await api(`/api/broadcasts/${encodeURIComponent(id)}`)); $('error').textContent = ''; }
+  try {
+    const b = await api(`/api/broadcasts/${encodeURIComponent(id)}`);
+    if (current && current.status !== b.status) loadRecordings(); // 방송이 끝나면 곧 녹화가 생긴다
+    render(b); $('error').textContent = '';
+  }
   catch (err) { showError(err.status === 404 ? new Error('없는 방송입니다.') : err); }
 }
 
@@ -180,10 +200,11 @@ renderNav().then((u) => {
   $('comment-form').hidden = !me;
   $('comment-login').hidden = !!me;
   $('comment-login-link').href = `login.html?next=${encodeURIComponent('broadcast.html?id=' + id)}`;
-  return Promise.all([load(), loadComments()]);
+  return Promise.all([load(), loadComments(), loadRecordings()]);
 });
 setInterval(load, 5000); // 방송 시작·종료를 시청자 화면에 반영
 setInterval(loadComments, 3000);
+setInterval(() => current?.status !== 'READY' && loadRecordings(), 10000);
 </script>
 </body>
 </html>

@@ -2,10 +2,13 @@
 # (HTTPS가 필요할 때만: docker compose --profile https up -d  →  https://<DOMAIN>/publish.html)
 services:
   mediamtx:
-    image: bluenviron/mediamtx:1.21.3
+    # -ffmpeg 변형 = Alpine 기반이라 녹화 완료 훅(record-hook.sh)에서 sh·wget을 쓸 수 있다
+    image: bluenviron/mediamtx:1.21.3-ffmpeg
     restart: unless-stopped
     volumes:
       - ./media/mediamtx.yml:/mediamtx.yml:ro
+      - ./media/record-hook.sh:/record-hook.sh:ro
+      - recordings:/recordings          # 녹화 파일. 컨테이너를 지워도 남는다 (down -v만 삭제)
     environment:
       # 브라우저에 알려 줄 WebRTC(ICE) 주소. 같은 PC면 127.0.0.1, 다른 기기에서 붙으면 PC의 LAN IP
       MTX_WEBRTCADDITIONALHOSTS: ${PUBLIC_HOST:-127.0.0.1}
@@ -14,6 +17,10 @@ services:
       MTX_AUTHMETHOD: http
       MTX_AUTHHTTPADDRESS: http://backend:8080/api/internal/media/auth?secret=${MEDIA_HOOK_SECRET:-local-media-hook-secret}
       MTX_APIADDRESS: :9997              # 백엔드가 상태 동기화에 쓴다. ports에 없으니 호스트·외부에서는 못 붙음
+      # 녹화: 볼륨에 저장하고, 파일이 완성되면 백엔드에 위치·길이를 알린다 (RecordingService)
+      MTX_PATHDEFAULTS_RECORDPATH: /recordings/%path/%Y-%m-%d_%H-%M-%S-%f%z
+      MTX_PATHDEFAULTS_RUNONRECORDSEGMENTCOMPLETE: sh /record-hook.sh
+      RECORD_HOOK_URL: http://backend:8080/api/internal/media/recordings?secret=${MEDIA_HOOK_SECRET:-local-media-hook-secret}
     ports:
       - "8888:8888"        # HLS 시청
       - "8889:8889"        # WHIP 송출 / WHEP
@@ -33,6 +40,7 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD:-livestream-local}
       JWT_SECRET: ${JWT_SECRET:-}   # 비우면 기동마다 임의 키(재시작 시 재로그인). 배포 시 .env에 32자 이상
       MEDIAMTX_API_URL: http://mediamtx:9997
+      MEDIAMTX_PLAYBACK_URL: http://mediamtx:9996
       MEDIA_HOOK_SECRET: ${MEDIA_HOOK_SECRET:-local-media-hook-secret}   # MediaMTX와 같은 값. 배포 시 .env로 바꾼다
       # 등록 안 된 스트림 키(dev-publish.html의 test 등)로도 송출 허용. 로컬 개발용 — 배포 시 .env에 false
       STREAM_DEV_BYPASS: ${STREAM_DEV_BYPASS:-true}
@@ -85,3 +93,4 @@ services:
 volumes:
   caddy_data:
   pgdata:
+  recordings:

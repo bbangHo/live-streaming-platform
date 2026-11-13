@@ -109,9 +109,10 @@ test('PC 송출 → 자동 방송 중 → 비로그인 시청 → 타인 송출 
   await viewer.close();
 });
 
-test('모바일 송출(카메라) → 방송 중 → 종료', async ({ context }) => {
+test('모바일 송출(카메라) → 방송 중 → 종료 → 녹화 다시보기 → 소유자만 녹화 삭제', async ({ browser, context, request }) => {
   const page = await context.newPage();
-  const { id } = await signupAndCreate(page, `E2E 모바일 ${Date.now()}`);
+  const title = `E2E 모바일 ${Date.now()}`;
+  const { id } = await signupAndCreate(page, title);
   await page.addInitScript(fakeMic, 1000);
   await page.goto(`${BASE}/publish-mobile.html?id=${id}`);
   await page.getByRole('button', { name: '방송 시작' }).click();
@@ -119,9 +120,38 @@ test('모바일 송출(카메라) → 방송 중 → 종료', async ({ context }
   await expect(page.locator('#log')).toContainText('카메라 1개');
   await expect(page.locator('#log')).toContainText('마이크 1개');
   await expect(page.locator('#status')).toHaveText('방송 중', { timeout: 10_000 });
+  await page.waitForTimeout(5000); // 녹화될 분량
   page.once('dialog', (d) => d.accept());
   await page.getByRole('button', { name: '방송 종료' }).click();
   await expect(page.locator('#status')).toHaveText('종료');
+
+  // 녹화: 송출이 끝나면 MediaMTX가 파일을 완성하고 백엔드가 위치를 저장 → 방송 상세 '다시보기'에 보임
+  await page.goto(`${BASE}/broadcast.html?id=${id}`);
+  await expect(page.locator('#recording-list a').first()).toBeVisible({ timeout: 20_000 });
+  const recs = await (await request.get(`${BASE}/api/broadcasts/${id}/recordings`)).json();
+  expect(recs[0].durationMs).toBeGreaterThan(3000);
+  expect(recs[0].filePath).toMatch(/^\/recordings\/live\//);
+
+  // 비로그인도 다시보기 목록·재생 가능, 삭제 버튼 없음
+  const anon = await browser.newPage();
+  await anon.goto(`${BASE}/recordings.html`);
+  await anon.locator('#list a', { hasText: title }).first().click();
+  await expect(anon.locator('#title')).toHaveText(title);
+  await expect(anon.locator('#file')).toHaveText(recs[0].filePath);
+  await anon.evaluate(() => { const v = document.querySelector('#player video'); v.muted = true; return v.play(); });
+  await expect.poll(() => anon.evaluate(() => document.querySelector('#player video').currentTime), { timeout: 15_000 }).toBeGreaterThan(1);
+  await expect(anon.locator('#manage')).toBeHidden();
+  expect((await request.delete(`${BASE}/api/recordings/${recs[0].id}`)).status()).toBe(401);
+  await anon.close();
+
+  // 타인(demo2) 삭제 403 → 소유자 삭제 → 파일도 사라짐(재생 404)
+  const demo2 = await (await request.post(`${BASE}/api/auth/login`, { data: { username: 'demo2', password: 'demo1234' } })).json();
+  expect((await request.delete(`${BASE}/api/recordings/${recs[0].id}`, { headers: { Authorization: `Bearer ${demo2.accessToken}` } })).status()).toBe(403);
+  await page.goto(`${BASE}/recording.html?id=${recs[0].id}`);
+  page.once('dialog', (d) => d.accept());
+  await page.getByRole('button', { name: '녹화 삭제' }).click();
+  await expect(page).toHaveURL(/recordings\.html$/);
+  expect((await request.get(`${BASE}${recs[0].playbackPath}`)).status()).toBe(404);
 });
 
 test('비로그인·타인은 송출 페이지를 쓸 수 없다', async ({ page }) => {

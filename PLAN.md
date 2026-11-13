@@ -60,7 +60,7 @@
 | 체크리스트 | 구현 방법 | 비고 |
 |---|---|---|
 | 댓글 작성/조회/수정/삭제 + 작성자 권한 ✅ | REST CRUD, 화면은 3초 주기 갱신. 조회 공개 / 작성 로그인 / 수정·삭제 **작성자만**(방송 소유자도 남의 댓글 불가, 서버 403) | `GET·POST /api/broadcasts/{id}/comments`, `PATCH·DELETE /api/comments/{id}` → [CommentService.requireAuthor](server/src/main/java/com/livestream/comment/CommentService.java), 화면 [broadcast.html](web/broadcast.html), 테스트 [CommentTest](server/src/test/java/com/livestream/comment/CommentTest.java)·[broadcast-crud.spec.js](tests/broadcast-crud.spec.js) |
-| 녹화 저장 / 목록·상세·재생 / 위치 영구저장 | **MediaMTX record 옵션** → 파일 + DB에 경로 | MediaMTX로 거의 공짜 |
+| 녹화 저장 / 목록·상세·재생 / 위치 영구저장 ✅ | MediaMTX `record: yes`(fMP4, `recordings` 볼륨) → 파일 완성 시 `runOnRecordSegmentComplete`([record-hook.sh](media/record-hook.sh))가 백엔드에 알림 → `recordings` 테이블에 **파일 위치·시작 시각·길이** 저장(같은 파일 중복 저장 안 함). 재생은 MediaMTX playback 서버(`/playback/get?...&format=mp4`). 목록·상세 공개, 삭제는 방송 소유자(파일도 삭제) | [RecordingService](server/src/main/java/com/livestream/recording/RecordingService.java), [RecordingController](server/src/main/java/com/livestream/recording/RecordingController.java), [V6__recordings.sql](server/src/main/resources/db/migration/V6__recordings.sql), 화면 [recordings.html](web/recordings.html)·[recording.html](web/recording.html)·상세의 '다시보기', 테스트 [RecordingTest](server/src/test/java/com/livestream/recording/RecordingTest.java)·[broadcast-publish.spec.js](tests/broadcast-publish.spec.js) |
 | 도네이션: 테스트결제/서버검증/중복적립 방지/합계 | PG 테스트모드 + **멱등키**(중복 승인 1회만) + ledger | 멱등성 명시 채점 |
 
 ---

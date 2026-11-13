@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>다시보기</title>
+<link rel="stylesheet" href="style.css">
+<script src="app.js"></script>
+</head>
+<body>
+<nav id="nav"></nav>
+<main>
+  <h1>다시보기</h1>
+  <p class="muted">방송은 송출되는 동안 자동으로 녹화됩니다. 송출이 끝나거나(끊겼다 다시 붙으면 파일이 나뉨) 1시간마다 녹화 파일이 하나씩 생깁니다.</p>
+  <ul id="list" class="grid"></ul>
+  <p id="empty" class="muted" hidden>아직 녹화가 없습니다.</p>
+  <p class="error" id="error"></p>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+async function load() {
+  try {
+    const list = await api('/api/recordings');
+    $('empty').hidden = list.length > 0;
+    $('list').replaceChildren(...list.map((r) => el('li', { className: 'card' },
+      el('a', { href: `recording.html?id=${r.id}` },
+        el('span', { className: 'badge' }, `▶ ${formatDuration(r.durationMs)}`),
+        el('h3', {}, r.broadcastTitle ?? '(삭제된 방송)'),
+        el('div', { className: 'muted' }, `${r.ownerUsername ?? '알 수 없음'} · ${new Date(r.startedAt).toLocaleString()}`)))));
+  } catch (err) { $('error').textContent = err.message; }
+}
+renderNav();
+load();
+</script>
+</body>
+</html>

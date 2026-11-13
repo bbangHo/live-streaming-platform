@@ -16,6 +16,11 @@
 	handle /api/* {
 		reverse_proxy backend:8080
 	}
+	# 녹화 재생 (MediaMTX playback 서버)
+	handle_path /playback/* {
+		reverse_proxy mediamtx:9996
+	}
+
 	# HLS 재생목록·세그먼트
 	handle /live/* {
 		reverse_proxy mediamtx:8888
