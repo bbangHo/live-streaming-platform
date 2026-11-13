@@ -34,6 +34,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/auth/signup", "/api/auth/login",
                                 "/api/auth/refresh", "/api/auth/logout").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/broadcasts", "/api/broadcasts/*").permitAll()
+                        // MediaMTX → 백엔드 송출 인증. 로그인 대신 hook secret으로 확인(StreamAuthController), 외부 프록시에서는 막힘
+                        .requestMatchers(HttpMethod.POST, "/api/internal/media/auth").permitAll()
                         .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(e -> e.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))

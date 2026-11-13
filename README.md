@@ -3,7 +3,7 @@
 치지직 같은 실시간 라이브 방송 송출·시청 웹 서비스. (Codemit 공모전 제출작)
 
 > 상태: **개발 중** · 마감 2026-11-19 23:59 · 평가 기준·계획은 [PLAN.md](./PLAN.md) 참고
-> 현재 구현: 브라우저 화면 송출(WHIP) → MediaMTX → HLS 시청, 회원가입·로그인(JWT)·소유자 인가, 방송 등록·목록·상세(시청)·수정·삭제 화면. 송출 페이지와 방송 상태 자동 연동·모바일 송출은 개발 중.
+> 현재 구현: 회원가입·로그인(JWT)·소유자 인가, 방송 등록·목록·상세(시청)·수정·삭제, **PC 화면 송출**(화면 + 탭/시스템 소리 + 마이크)·**모바일 카메라 송출**(WHIP) → MediaMTX → HLS 시청, **송출 권한 서버 검증**(방송 소유자 토큰만 송출 가능), **방송 상태 자동 연동**(송출이 들어오면 방송 중, 끊긴 채 30초면 종료). 선택 기능(댓글·녹화·도네이션)은 개발 중.
 
 ---
 
@@ -32,8 +32,9 @@ docker compose up -d
 | 주소 | 용도 |
 |---|---|
 | **http://localhost:8000/** | **방송 목록** (여기서 시작) — 로그인·방송 만들기·상세(시청)·관리 |
-| http://localhost:8000/publish.html | 송출 페이지 |
-| http://localhost:8000/watch.html | 시청 페이지 |
+| http://localhost:8000/publish-pc.html?id=… | PC 송출 (방송 상세 → 「PC 화면 송출」) |
+| http://localhost:8000/publish-mobile.html?id=… | 모바일 카메라 송출 (방송 상세 → 「모바일 카메라 송출」, 휴대폰은 HTTPS 필요) |
+| http://localhost:8000/dev-publish.html, dev-watch.html | 개발용: 스트림 키를 직접 넣는 송출·시청 (등록 안 된 키만, `STREAM_DEV_BYPASS=true`일 때) |
 | `:8889` / `:8888` / `:8189` (UDP·TCP) | MediaMTX — WHIP / HLS / WebRTC 미디어 |
 | http://localhost:8080/api | 백엔드 API (Spring Boot) — 인증/인가, 방송 정보 |
 | (내부) postgres | DB. `pgdata` 볼륨에 저장 → 재시작·`down` 후에도 유지 (`down -v`만 삭제) |
@@ -55,6 +56,8 @@ docker compose up -d
 | `API_PORT` | `8080` | 백엔드 API 포트 (8080을 다른 프로그램이 쓰면 바꿈) |
 | `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | `livestream` / `livestream` / 로컬 기본값 | DB 자격증명. 기본값은 로컬 전용(DB 포트는 외부에 안 엶) — **배포 시 반드시 .env로 지정** |
 | `JWT_SECRET` | (비어 있음) | access token 서명 키, 32자 이상. 비우면 기동마다 임의 키(재시작하면 다시 로그인) |
+| `MEDIA_HOOK_SECRET` | 로컬 기본값 | MediaMTX → 백엔드 송출 인증 요청에 붙는 공유 비밀값. **배포 시 반드시 .env로 지정** |
+| `STREAM_DEV_BYPASS` | `true` | 등록 안 된 스트림 키(개발용 페이지)로도 로그인 없이 송출 허용. **배포 시 `false`** |
 
 ### Docker 없이 실행
 MediaMTX 바이너리를 받아 직접 띄웁니다 → [media/README.md](./media/README.md)
@@ -62,33 +65,39 @@ MediaMTX 바이너리를 받아 직접 띄웁니다 → [media/README.md](./medi
 media/mediamtx.exe media/mediamtx.yml
 python -m http.server 8000 --bind 127.0.0.1 -d web
 ```
+이 모드는 백엔드가 없어 개발용 페이지(`dev-publish.html`, `dev-watch.html`)만 동작합니다.
 
 ## 기능 확인
 
-### 방송 관리 (화면)
+### 방송 만들기 → PC 송출 → 시청 → 종료
 1. http://localhost:8000/ → 우측 상단 **로그인** → 테스트 계정 `demo1` / `demo1234` (또는 회원가입).
-2. **방송 만들기**에 제목·설명 입력 → 상세 페이지로 이동. 소유자에게만 **방송 관리**(시작·종료·삭제·수정, 스트림 키, 송출 페이지 링크)가 보입니다.
-3. **송출 페이지 열기** → 스트림 키가 채워진 송출 페이지에서 **방송 시작**(아래 PC 송출 절차) → 상세 페이지에서 **방송 시작**을 누르면 상태가 `방송 중`이 되고, 비로그인 시청자도 상세 페이지에서 영상이 재생됩니다. (송출 페이지 ↔ 방송 상태 자동 연동은 D6)
-4. 로그아웃하거나 `demo2`로 로그인해 같은 방송을 열면 관리 영역이 없고, API로 직접 바꿔도 401/403입니다.
-5. `docker compose restart` 또는 `down` → `up` 후에도 방송이 그대로 조회됩니다(PostgreSQL 볼륨).
+2. **방송 만들기**에 제목·설명 입력 → 상세 페이지로 이동. 소유자에게만 **방송 관리**(PC/모바일 송출, 종료, 삭제, 수정)가 보입니다.
+3. 소리가 나는 탭을 하나 띄워 둡니다 (예: 유튜브).
+4. **PC 화면 송출** → **방송 시작** → 공유 창에서 그 탭 선택 + **「오디오 공유」 켜기** → 마이크 허용.
+   로그에 `화면 소리 1개, 마이크 1개`, 연결 상태 `송출 중`이 뜨고, 2초 안에 방송 상태가 **방송 중**으로 바뀝니다(서버가 MediaMTX를 보고 바꿈 — 시작 버튼 API 없음).
+5. **시청:** 다른 브라우저(또는 시크릿 창, 비로그인)로 http://localhost:8000/ → **방송 중** 탭 → 방송 클릭 → 영상 컨트롤에서 음소거 해제. 1~4초 지연으로 화면과 **탭 소리 + 마이크 소리**가 나옵니다.
+6. **종료:** 송출 페이지 또는 상세 페이지의 **방송 종료** → 상태 **종료**, 송출이 끊기고 시청 화면은 「종료된 방송입니다」. 종료한 방송에는 다시 송출할 수 없습니다(서버가 거부).
+7. **끊김 처리:** 송출 중에 송출 페이지를 닫거나 「공유 중지」를 누르면 방송은 **30초 동안 방송 중을 유지**하고, 그 안에 「방송 시작」을 다시 누르면 이어집니다. 30초가 지나면 자동으로 **종료**됩니다.
+8. **인가:** 로그아웃하거나 `demo2`로 로그인해 같은 방송을 열면 관리 영역이 없고, 송출 페이지도 「소유자만 송출할 수 있습니다」. API·WHIP로 직접 시도해도 401/403입니다(아래).
+9. `docker compose restart` 또는 `down` → `up` 후에도 방송이 그대로 조회됩니다(PostgreSQL 볼륨).
 
-### PC 송출 → 시청 → 종료
-1. 소리가 나는 탭을 하나 띄웁니다 (예: 유튜브).
-2. **송출:** http://localhost:8000/publish.html → 스트림 키(기본 `test`) → **방송 시작** → 공유 창에서 그 탭 선택 + **「오디오 공유」 켜기** → 마이크 허용.
-   로그에 `화면 소리 1개, 마이크 1개`, `WHIP 201`, 상태 `connected`가 뜹니다.
-3. **시청:** 다른 창에서 http://localhost:8000/watch.html → 같은 스트림 키 → **재생** → 영상 컨트롤에서 음소거 해제.
-   1~4초 지연으로 화면과 **탭 소리 + 마이크 소리**가 나옵니다.
-4. **종료:** 송출 페이지의 **방송 종료** 또는 브라우저의 **「공유 중지」**. 송출 상태가 `종료`로 바뀌고 시청 화면이 멈춥니다.
-
-### 모바일 시청
-같은 와이파이의 휴대폰에서 `http://<이 PC의 LAN IP>:8000/watch.html` → 재생. (시청은 HTTPS가 필요 없음. Windows 방화벽이 8000·8888 포트를 막으면 허용 필요 — **아직 실기기 미확인**)
-
-### 모바일 송출 (개발 중 — D8)
-모바일 카메라 송출 페이지는 아직 없습니다. 휴대폰 브라우저는 `localhost`가 아니면 HTTPS에서만 카메라를 열 수 있어, 그때는 HTTPS 프로필을 씁니다:
+### 모바일 송출 (카메라 + 마이크)
+휴대폰 브라우저는 `localhost`가 아니면 **HTTPS에서만** 카메라를 엽니다. 같은 와이파이의 PC에서 HTTPS 프로필로 띄웁니다:
 ```bash
 # .env: DOMAIN=<PC LAN IP>, PUBLIC_HOST=<PC LAN IP>
 docker compose --profile https up -d   # → https://<PC LAN IP>/  (사설 인증서 경고는 수락)
 ```
+휴대폰에서 로그인 → 방송 상세 → **모바일 카메라 송출** → **방송 시작** → 카메라·마이크 허용. 방송 중에도 **카메라 전환**(전면/후면)이 끊김 없이 됩니다. PC 브라우저에서도 웹캠으로 같은 페이지를 써 볼 수 있습니다. (**실기기 확인은 D9 예정**)
+
+### 모바일 시청
+같은 와이파이의 휴대폰에서 `http://<이 PC의 LAN IP>:8000/` → 방송 클릭. (시청은 HTTPS가 필요 없음. Windows 방화벽이 8000 포트를 막으면 허용 필요 — **아직 실기기 미확인**)
+
+### 송출 권한이 서버에서 검증되는 방식
+스트림 키는 시청 주소(`/live/<키>/index.m3u8`)에 쓰이는 **공개 값**이라, 키만으로는 송출할 수 없게 했습니다.
+1. 송출 페이지가 WHIP 요청에 로그인 토큰을 붙입니다: `POST /live/<키>/whip` + `Authorization: Bearer <access token>`.
+2. MediaMTX가 송출(publish)마다 백엔드에 묻습니다(`authMethod: http`) → [StreamAuthService](./server/src/main/java/com/livestream/stream/StreamAuthService.java): **토큰이 유효 + 그 방송의 소유자 + 종료되지 않은 방송**일 때만 허용, 아니면 401. 시청(read)은 공개.
+3. 백엔드가 2초마다 MediaMTX의 송출 목록을 보고 상태를 맞춥니다 → [StreamStatusSync](./server/src/main/java/com/livestream/stream/StreamStatusSync.java): 송출이 들어오면 방송 중, 끊긴 채 30초면 종료, 종료된 방송에 남은 송출은 끊음(kick). 같은 방송에 두 번째 송출은 MediaMTX가 거부(`overridePublisher: no`).
+4. 이 내부 인증 주소(`/api/internal/...`)는 nginx·Caddy가 밖에서 막고, 공유 비밀값(`MEDIA_HOOK_SECRET`)이 없으면 백엔드가 거부합니다.
 
 ### 인증·인가 확인 (API)
 화면 대신 API로도 확인할 수 있습니다 (Git Bash / macOS / Linux 기준):
@@ -101,6 +110,9 @@ curl -i -X POST $B/broadcasts -H 'Content-Type: application/json' -d '{"title":"
 curl -s -X POST $B/auth/login -H 'Content-Type: application/json' -d '{"username":"demo2","password":"demo1234"}'
 # 3) demo2가 demo1의 방송(1번) 수정 → 403 "방송 소유자만 할 수 있음"
 curl -i -X PATCH $B/broadcasts/1 -H "Authorization: Bearer <demo2 accessToken>" -H 'Content-Type: application/json' -d '{"title":"hack"}'
+# 4) demo1 방송의 스트림 키로 WHIP 송출 시도: 토큰 없음·demo2 토큰 → 401
+KEY=$(curl -s $B/broadcasts/1 | sed 's/.*"streamKey":"\([^"]*\)".*/\1/')
+curl -i -X POST http://localhost:8000/live/$KEY/whip -H 'Content-Type: application/sdp' -H "Authorization: Bearer <demo2 accessToken>" -d 'v=0'
 ```
 
 | 메서드 · 경로 | 권한 | 설명 |
@@ -113,7 +125,8 @@ curl -i -X PATCH $B/broadcasts/1 -H "Authorization: Bearer <demo2 accessToken>" 
 | `GET /api/broadcasts[?status=LIVE]`, `GET /api/broadcasts/{id}` | 공개 | 방송 목록(최신순, 상태 필터)·상세. 응답에 방송자·스트림 키·`hlsPath`(시청 주소) |
 | `POST /api/broadcasts` | 로그인 | `{title, description?}` 방송 등록 (등록자 = 소유자, 스트림 키 자동 발급) |
 | `PATCH /api/broadcasts/{id}`, `DELETE /api/broadcasts/{id}` | **소유자** | `{title, description?}` 수정 · 삭제. 타인 403, 비로그인 401 |
-| `POST /api/broadcasts/{id}/start`, `/stop` | **소유자** | 상태 `READY → LIVE → ENDED` 한 방향만. 순서가 틀리면 409 |
+| `POST /api/broadcasts/{id}/stop` | **소유자** | 방송 종료 `LIVE → ENDED` (송출 중이면 끊김). 방송 중이 아니면 409. 시작 API는 없음 — 송출이 MediaMTX에 들어오면 서버가 `READY → LIVE` |
+| `POST /live/{streamKey}/whip` | **소유자** (Bearer) | WHIP 송출(MediaMTX). 토큰 없음·타인·종료된 방송 401, 같은 방송 두 번째 송출 거부 |
 
 인가는 전부 서버에서 합니다: 로그인 여부는 [SecurityConfig](./server/src/main/java/com/livestream/config/SecurityConfig.java), 소유자는 [BroadcastService.requireOwner](./server/src/main/java/com/livestream/broadcast/BroadcastService.java). 오류 응답은 `{"status":403,"detail":"..."}` 형식(RFC 9457).
 
@@ -123,7 +136,7 @@ cd server
 ./gradlew test
 ```
 - JDK 21 + **Docker 필요** (Testcontainers가 실제 PostgreSQL을 띄워 Flyway 스키마로 돌립니다).
-- 검증 범위: 가입·로그인·내정보·재발급(회전)·로그아웃, 중복 아이디 409, 잘못된 입력 400, 틀린 비번/없는 아이디 401, 위조·만료 토큰 거부, 테스트 계정 로그인, 방송 인가 **비로그인 401 / 타인 403(데이터 불변) / 소유자 허용**, 방송 등록(스트림 키·HLS 주소)·수정·상태 필터·상태 전이 409·입력 검증 400.
+- 검증 범위: 가입·로그인·내정보·재발급(회전)·로그아웃, 중복 아이디 409, 잘못된 입력 400, 틀린 비번/없는 아이디 401, 위조·만료 토큰 거부, 테스트 계정 로그인, 방송 인가 **비로그인 401 / 타인 403(데이터 불변) / 소유자 허용**, 방송 등록(스트림 키·HLS 주소)·수정·상태 필터·상태 전이 409·입력 검증 400, **송출 인증**(소유자 토큰만 허용, 토큰 없음·위조·타인·종료된 방송·등록 안 된 키 거부, hook secret 불일치 403), **상태 동기화**(송출 들어오면 방송 중, 끊김 30초 유예·재접속 시 유지, 초과 시 종료, 종료된 방송의 송출 끊기).
 - ⚠️ Windows에서 프로젝트 경로에 **한글**이 있으면 Gradle 테스트 워커가 `ClassNotFoundException`으로 실패합니다. 영문 경로에 두거나 `./gradlew test -Dorg.gradle.jvmargs=-Dfile.encoding=MS949`로 실행하세요.
 
 ### 자동 E2E 테스트
@@ -135,7 +148,9 @@ npm run test:e2e
 - `docker compose up -d` 상태면 그 스택을 쓰고, 아니면 MediaMTX 바이너리·python 서버를 직접 띄웁니다.
 - 테스트 중 스피커에서 삐 소리가 납니다.
 - 다른 주소 대상: `E2E_BASE=https://<도메인> npm run test:e2e`
-- `tests/broadcast-crud.spec.js`: **화면으로** 가입 → 방송 만들기 → 수정 → 시작/종료(목록 '방송 중' 탭) → 비로그인·`demo2` 화면에 관리 영역 없음 + API 직접 호출 401/403 → 소유자 삭제. `docker compose up -d` 상태에서만 돌고, 백엔드가 없으면 건너뜁니다.
+- `tests/broadcast-crud.spec.js`: **화면으로** 가입 → 방송 만들기 → 수정 → 송출 링크 → 비로그인·`demo2` 화면에 관리 영역 없음 + API 직접 호출 401/403 → 소유자 삭제.
+- `tests/broadcast-publish.spec.js`: **PC 송출 페이지**에서 진짜 탭 캡처 송출 → 서버가 자동으로 방송 중 → 비로그인 시청자가 목록 '방송 중' 탭 → 상세에서 재생 → 토큰 없음·타인 토큰·두 번째 송출 거부 → 소유자 종료 → HLS 사라짐·시청 화면 종료 → 종료된 방송 재송출 거부. **모바일 송출 페이지**(가짜 카메라)로 송출 → 방송 중 → 종료. 비로그인·타인의 송출 페이지 접근 차단.
+- 위 두 파일은 백엔드가 필요해 `docker compose up -d` 상태에서만 돌고, 없으면 건너뜁니다. `broadcast-loop.spec.js`는 개발용 페이지(`dev-publish.html`)로 소리 믹싱·지연을 숫자로 판정합니다.
 
 자세한 검증 범위와 한계: [docs/spike-d1-streaming.md](./docs/spike-d1-streaming.md)
 

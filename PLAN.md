@@ -13,7 +13,7 @@
 | **송출(브라우저)** | WebRTC **WHIP** — PC `getDisplayMedia`+`getUserMedia`, 모바일 `getUserMedia` | **고정** |
 | **시청** | 대중=**HLS**(hls.js), 저지연 옵션=WHEP | 고정 |
 | 백엔드 | **Spring Boot 4 (Java 21)** + Spring Security · BCrypt · JWT(access+refresh, stateless) · JPA · Flyway → `server/` | **고정** (D3 확정) |
-| 프론트 | **권장: React/Next + hls.js** | 조정 |
+| 프론트 | 정적 HTML + 바닐라 JS + hls.js (빌드 없음, nginx·Caddy가 서빙) → `web/` | **고정** (D5 확정) |
 | DB | **PostgreSQL** (영구 저장 필수) | 거의 고정 |
 | 배포 | **HTTPS 필수** (getUserMedia는 secure context 전용) | **고정** |
 
@@ -25,27 +25,27 @@
 
 > 각 항목의 "구현 위치"는 계획이며, 구현하면서 실제 파일·엔드포인트로 갱신한다. ✅표시는 제출 시 '충족' 체크 대상.
 
-### 필수 — PC 라이브 방송
-| 체크리스트 | 구현 방법 | (계획) 위치 |
+### 필수 — PC 라이브 방송 (D6 구현 완료)
+| 체크리스트 | 구현 방법 | 위치 |
 |---|---|---|
-| 화면 캡처 실시간 송출 | `getDisplayMedia()` → WHIP로 MediaMTX 송출 | `web/src/broadcast/pc/usePcStream.ts` |
-| 탭/시스템 소리 + 마이크 함께 | `getDisplayMedia({audio:true})` + `getUserMedia(audio)` → Web Audio로 믹싱 | 동上 |
-| 마이크 음성 송출 | 위 믹싱 트랙 포함 | 동上 |
-| 시작/종료 시 연결 생성·종료 | WHIP 세션 open/close + 서버에 상태 PATCH | `api/broadcasts/:id/start`·`/stop` |
+| 화면 캡처 실시간 송출 | `getDisplayMedia()` → WHIP(`Authorization: Bearer`)로 MediaMTX 송출 | [publish-pc.html](web/publish-pc.html) `capturePc` + [whip.js](web/whip.js) `publishWhip` |
+| 탭/시스템 소리 + 마이크 함께 | `getDisplayMedia({audio:true})` + `getUserMedia(audio)` → Web Audio `MediaStreamDestination`으로 믹싱해 오디오 1트랙 | [publish-pc.html](web/publish-pc.html) `capturePc` — E2E가 시청 쪽 스펙트럼으로 두 소리 확인 |
+| 마이크 음성 송출 | 위 믹싱 트랙 포함 (마이크 거부 시 화면 소리만) | 동上 |
+| 시작/종료 시 연결 생성·종료 | 시작 = WHIP POST(연결 생성), 종료 = WHIP DELETE + `POST /api/broadcasts/{id}/stop` | [studio.js](web/studio.js) `start`·`end`·`stopSending` |
 
-### 필수 — 모바일 라이브 방송
-| 체크리스트 | 구현 방법 | (계획) 위치 |
+### 필수 — 모바일 라이브 방송 (D6 구현 완료, 실기기 확인은 D9)
+| 체크리스트 | 구현 방법 | 위치 |
 |---|---|---|
-| 카메라+마이크 실시간 송출 | `getUserMedia({video,audio})` → 같은 WHIP 경로 재사용 | `web/src/broadcast/mobile/useMobileStream.ts` |
-| 마이크 음성 함께 | audio 트랙 포함 | 동上 |
-| 시작·종료 | PC와 동일 start/stop 흐름 | 공통 `useWhipPublisher` |
+| 카메라+마이크 실시간 송출 | `getUserMedia({video:{facingMode}, audio})` → 같은 WHIP 경로 재사용. 방송 중 전면/후면 전환은 `replaceTrack`(재연결 없음) | [publish-mobile.html](web/publish-mobile.html) `captureCamera`·`flipCamera` |
+| 마이크 음성 함께 | 같은 스트림의 audio 트랙 | 동上 |
+| 시작·종료 | PC와 같은 흐름 | 공통 [studio.js](web/studio.js), [whip.js](web/whip.js) |
 
 ### 필수 — 방송 관리 및 시청
 | 체크리스트 | 구현 방법 | (계획) 위치 |
 |---|---|---|
 | 등록·조회·수정·삭제 | REST CRUD + 화면 (D5 구현) | `GET·POST /api/broadcasts`, `GET·PATCH·DELETE /api/broadcasts/{id}` → [BroadcastController](server/src/main/java/com/livestream/broadcast/BroadcastController.java) · 화면 [index.html](web/index.html)(목록·만들기), [broadcast.html](web/broadcast.html)(상세·수정·삭제) |
 | 목록·상세 + 다른 기기 수신·재생 | 목록(전체/방송 중 탭)·상세 페이지 + hls.js 플레이어. HLS는 같은 출처 `/live/{streamKey}/index.m3u8`(nginx·Caddy → MediaMTX) | [index.html](web/index.html), [broadcast.html](web/broadcast.html), [media/nginx.conf](media/nginx.conf) — 다른 기기 실재생은 D9 |
-| 방송 중/종료 상태 관리 + 종료 시 송출 중단 | DB `status` READY→LIVE→ENDED(역행 409, [Broadcast.start/stop](server/src/main/java/com/livestream/broadcast/Broadcast.java)) + stop 시 WHIP 종료 + (MediaMTX webhook로 동기화) | 상태 API는 D5 완료. 송출 페이지 연동·webhook은 D6~D8 |
+| 방송 중/종료 상태 관리 + 종료 시 송출 중단 | DB `status` READY→LIVE→ENDED(역행 409). **MediaMTX가 진실 공급원**: 백엔드가 2초마다 송출 목록을 조회해 송출이 들어오면 LIVE, 끊긴 채 30초(유예)면 ENDED, 종료된 방송에 남은 송출은 kick. 소유자 종료 = `POST /stop` → 송출 끊김. 같은 방송 중복 송출 거부(`overridePublisher: no`) | [StreamStatusSync](server/src/main/java/com/livestream/stream/StreamStatusSync.java), [Broadcast.goLive/end](server/src/main/java/com/livestream/broadcast/Broadcast.java), [MediaMtxClient](server/src/main/java/com/livestream/stream/MediaMtxClient.java) — [StreamStatusSyncTest](server/src/test/java/com/livestream/stream/StreamStatusSyncTest.java), E2E [broadcast-publish.spec.js](tests/broadcast-publish.spec.js) |
 | **영구 저장 + 재시작 후 조회** | PostgreSQL 저장 (인메모리 금지), compose `pgdata` 볼륨 | `broadcasts` 테이블 ([V1__init.sql](server/src/main/resources/db/migration/V1__init.sql)) — D3에서 `down`→`up` 후 조회 수동 확인 |
 
 ### 필수 — 사용자 인증 및 인가
@@ -53,10 +53,8 @@
 |---|---|---|
 | 회원가입/로그인/로그아웃/상태관리 | 비번 **BCrypt** 해싱. access JWT(HS256, 15분) + refresh(불투명 랜덤, DB엔 SHA-256 해시, 14일, 재발급 시 회전). 로그아웃 = refresh 폐기 | `POST /api/auth/signup·login·refresh·logout`, `GET /api/auth/me` → [AuthController](server/src/main/java/com/livestream/auth/AuthController.java), [AuthService](server/src/main/java/com/livestream/auth/AuthService.java), [JwtProvider](server/src/main/java/com/livestream/auth/JwtProvider.java) |
 | 비로그인=조회·시청 가능 / 등록·송출=로그인만 | Spring Security 필터 체인: `GET /api/broadcasts/**` 공개, 그 외 인증 필요(없으면 401). HLS 시청은 MediaMTX `:8888` 공개 | [SecurityConfig](server/src/main/java/com/livestream/config/SecurityConfig.java), [JwtAuthFilter](server/src/main/java/com/livestream/auth/JwtAuthFilter.java) |
-| **수정·삭제·송출제어 시 서버에서 소유자 검증** | 모든 변경 메서드가 `requireOwner` 경유 → `broadcast.ownerId == 토큰의 사용자 id` 아니면 403 | `PATCH·DELETE /api/broadcasts/{id}`, `POST /api/broadcasts/{id}/start·stop` → [BroadcastService.requireOwner](server/src/main/java/com/livestream/broadcast/BroadcastService.java) |
-| (검증) 비로그인/소유자/타인 | 통합 테스트(실 PostgreSQL, Testcontainers) | [BroadcastAuthorizationTest](server/src/test/java/com/livestream/broadcast/BroadcastAuthorizationTest.java), [AuthFlowTest](server/src/test/java/com/livestream/auth/AuthFlowTest.java), [JwtProviderTest](server/src/test/java/com/livestream/auth/JwtProviderTest.java) |
-
-> 남은 일: WHIP 송출 자체(MediaMTX `:8889`)는 아직 누구나 가능 — MediaMTX `authHTTPAddress`로 백엔드가 송출 권한을 판정하게 묶는 건 D6~D8(송출 페이지 연동 때).
+| **수정·삭제·송출제어 시 서버에서 소유자 검증** | 모든 변경 메서드가 `requireOwner` 경유 → `broadcast.ownerId == 토큰의 사용자 id` 아니면 403. **송출 자체(WHIP)도** MediaMTX `authMethod: http` → 백엔드가 토큰·소유자·방송 상태 확인, 아니면 401 | `PATCH·DELETE /api/broadcasts/{id}`, `POST /api/broadcasts/{id}/stop` → [BroadcastService.requireOwner](server/src/main/java/com/livestream/broadcast/BroadcastService.java). 송출 → [StreamAuthService](server/src/main/java/com/livestream/stream/StreamAuthService.java), [StreamAuthController](server/src/main/java/com/livestream/stream/StreamAuthController.java), [mediamtx.yml](media/mediamtx.yml)·[compose.yml](compose.yml) |
+| (검증) 비로그인/소유자/타인 | 통합 테스트(실 PostgreSQL, Testcontainers) + E2E(WHIP 직접 호출 401) | [BroadcastAuthorizationTest](server/src/test/java/com/livestream/broadcast/BroadcastAuthorizationTest.java), [StreamAuthTest](server/src/test/java/com/livestream/stream/StreamAuthTest.java), [AuthFlowTest](server/src/test/java/com/livestream/auth/AuthFlowTest.java), [JwtProviderTest](server/src/test/java/com/livestream/auth/JwtProviderTest.java), [broadcast-publish.spec.js](tests/broadcast-publish.spec.js) |
 
 ### 선택 — 가산점 (효율순: 댓글 → 녹화 → 도네이션)
 | 체크리스트 | 구현 방법 | 비고 |
@@ -76,8 +74,8 @@
 - D5: 방송 CRUD + DB 영구저장
 
 **2주차 — 필수 완성 + 선택**
-- D6-7: PC 송출(화면+소리+마이크 믹싱) 완성
-- D8: 모바일 송출 + 상태관리/종료 처리
+- D6-7: PC 송출(화면+소리+마이크 믹싱) 완성 ✅ (송출 인증·상태 자동 연동 포함)
+- D8: 모바일 송출 + 상태관리/종료 처리 ✅ (D6에 함께 — 실기기 확인은 D9)
 - D9: 교차기기 시청 검증 + 예외처리 + README
 - D10-11: 선택기능 (댓글 → 녹화)
 - D12: 도네이션(여유 시) + 버퍼
@@ -92,7 +90,7 @@
 2. **인가를 프론트에서만 하면 0점** — 모든 변경 API 서버 검증 필수.
 3. **배포 실패 = 평가 불가** — 배포를 1주차에, 막판 금지. 제출 1회.
 4. **WebRTC NAT** — 대칭 NAT에서 연결 실패 가능. 공인 IP 서버면 대개 OK, 안 되면 coturn(TURN).
-5. **상태 동기화** — 송출 끊김/브라우저 종료 시 방송이 LIVE로 남는 문제 → MediaMTX webhook 또는 주기 체크로 ENDED 처리.
+5. **상태 동기화** — 송출 끊김/브라우저 종료 시 방송이 LIVE로 남는 문제 → ✅ 주기 체크(2초) + 30초 유예로 ENDED 처리 (웹훅은 백엔드·MediaMTX 재시작 때 이벤트를 놓치므로 안 씀).
 6. **민감정보 커밋 금지** — `.env`는 `.gitignore`, `.env.example`만 올림.
 
 ## 5. 제출 전 최종 체크

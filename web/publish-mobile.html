@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>모바일 송출</title>
+<link rel="stylesheet" href="style.css">
+<script src="app.js"></script>
+<script src="whip.js"></script>
+<script src="studio.js"></script>
+</head>
+<body>
+<nav id="nav"></nav>
+<main>
+  <p class="muted">모바일 송출 · 카메라 + 마이크 · <a href="#" id="to-pc">PC 화면 송출로</a></p>
+  <h1 class="row"><span id="title"></span><span id="status"></span></h1>
+  <p id="hint" class="muted"></p>
+  <video id="preview" class="camera" autoplay muted playsinline></video>
+  <div class="row" style="margin-top: 12px">
+    <button id="start" class="primary" disabled>방송 시작</button>
+    <button id="end" class="danger" disabled>방송 종료</button>
+    <button id="flip" disabled>카메라 전환</button>
+    <span id="conn" class="muted">송출 안 함</span>
+  </div>
+  <div class="row" style="margin-top: 8px">
+    <label class="row muted">카메라
+      <select id="facing"><option value="user">전면</option><option value="environment">후면</option></select>
+    </label>
+    <span class="spacer"></span>
+    <a id="watch-link" target="_blank">시청 화면 열기</a>
+  </div>
+  <p class="error" id="error"></p>
+  <details class="card">
+    <summary>송출 방법 · 로그</summary>
+    <ol class="muted">
+      <li>휴대폰 브라우저는 <b>HTTPS</b> 주소에서만 카메라를 열 수 있습니다 (README의 HTTPS 실행 참고).</li>
+      <li>「방송 시작」 → 카메라·마이크 권한 허용 → 몇 초 안에 상태가 「방송 중」으로 바뀝니다.</li>
+      <li>방송 중에도 「카메라 전환」으로 전면/후면을 바꿀 수 있습니다 (끊기지 않음).</li>
+      <li>앱 전환·화면 꺼짐으로 송출이 끊기면 <b>30초 안에</b> 다시 시작해야 방송이 이어집니다.</li>
+    </ol>
+    <div id="log" class="log"></div>
+  </details>
+</main>
+
+<script>
+const $m = (id) => document.getElementById(id);
+const cameraConstraints = (facingMode) => ({ facingMode, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } });
+
+// 모바일 송출: 카메라(영상) + 마이크(소리)를 한 번에 받는다
+async function captureCamera(log) {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new Error(window.isSecureContext ? '이 브라우저는 카메라를 지원하지 않습니다.'
+      : '카메라는 HTTPS 주소에서만 열 수 있습니다. https:// 로 접속하세요.');
+  }
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: cameraConstraints($m('facing').value),
+    audio: { echoCancellation: true, noiseSuppression: true },
+  });
+  const v = stream.getVideoTracks()[0]?.getSettings() ?? {};
+  log(`트랙: 카메라 ${stream.getVideoTracks().length}개 (${v.width ?? '?'}x${v.height ?? '?'}), 마이크 ${stream.getAudioTracks().length}개`);
+  return { stream, stop: () => stream.getTracks().forEach((t) => t.stop()) };
+}
+
+// 방송 중 카메라 전환: 새 카메라 트랙으로 송신 트랙만 바꾼다(replaceTrack) → 재연결 없이 이어짐
+let live = null;
+async function flipCamera() {
+  if (!live) return;
+  const next = $m('facing').value === 'user' ? 'environment' : 'user';
+  $m('flip').disabled = true;
+  try {
+    const old = live.media.getVideoTracks()[0];
+    old.stop(); // 일부 휴대폰은 카메라 두 개를 동시에 못 연다 → 먼저 끈다
+    const fresh = (await navigator.mediaDevices.getUserMedia({ video: cameraConstraints(next) })).getVideoTracks()[0];
+    await live.pc.getSenders().find((s) => s.track === old || s.track?.kind === 'video')?.replaceTrack(fresh);
+    live.media.removeTrack(old); live.media.addTrack(fresh);
+    $m('preview').srcObject = live.media;
+    $m('facing').value = next;
+  } catch (e) {
+    $m('error').textContent = '카메라 전환 실패: ' + e.message;
+  } finally {
+    $m('flip').disabled = false;
+  }
+}
+
+$m('flip').onclick = flipCamera;
+$m('to-pc').href = 'publish-pc.html' + location.search;
+initStudio({
+  capture: captureCamera,
+  onLive: (ctx) => { live = ctx; $m('flip').disabled = false; $m('facing').disabled = true; },
+  onStop: () => { live = null; $m('flip').disabled = true; $m('facing').disabled = false; },
+});
+</script>
+</body>
+</html>

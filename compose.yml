@@ -10,6 +10,10 @@ services:
       # 브라우저에 알려 줄 WebRTC(ICE) 주소. 같은 PC면 127.0.0.1, 다른 기기에서 붙으면 PC의 LAN IP
       MTX_WEBRTCADDITIONALHOSTS: ${PUBLIC_HOST:-127.0.0.1}
       MTX_WEBRTCLOCALTCPADDRESS: :8189   # UDP가 막힌 망용 TCP 대체 경로
+      # 송출 인증: 송출마다 백엔드에 "이 토큰이 이 방송 소유자인가?"를 묻는다 (StreamAuthController)
+      MTX_AUTHMETHOD: http
+      MTX_AUTHHTTPADDRESS: http://backend:8080/api/internal/media/auth?secret=${MEDIA_HOOK_SECRET:-local-media-hook-secret}
+      MTX_APIADDRESS: :9997              # 백엔드가 상태 동기화에 쓴다. ports에 없으니 호스트·외부에서는 못 붙음
     ports:
       - "8888:8888"        # HLS 시청
       - "8889:8889"        # WHIP 송출 / WHEP
@@ -28,6 +32,10 @@ services:
       DB_USER: ${POSTGRES_USER:-livestream}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-livestream-local}
       JWT_SECRET: ${JWT_SECRET:-}   # 비우면 기동마다 임의 키(재시작 시 재로그인). 배포 시 .env에 32자 이상
+      MEDIAMTX_API_URL: http://mediamtx:9997
+      MEDIA_HOOK_SECRET: ${MEDIA_HOOK_SECRET:-local-media-hook-secret}   # MediaMTX와 같은 값. 배포 시 .env로 바꾼다
+      # 등록 안 된 스트림 키(dev-publish.html의 test 등)로도 송출 허용. 로컬 개발용 — 배포 시 .env에 false
+      STREAM_DEV_BYPASS: ${STREAM_DEV_BYPASS:-true}
     ports:
       - "${API_PORT:-8080}:8080"
 

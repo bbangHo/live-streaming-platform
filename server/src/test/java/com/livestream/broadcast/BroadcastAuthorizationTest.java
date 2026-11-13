@@ -46,15 +46,13 @@ class BroadcastAuthorizationTest extends ApiTestSupport {
                 .andExpect(status().isUnauthorized());
         mvc.perform(rename(id)).andExpect(status().isUnauthorized());
         mvc.perform(delete("/api/broadcasts/" + id)).andExpect(status().isUnauthorized());
-        mvc.perform(post("/api/broadcasts/" + id + "/start")).andExpect(status().isUnauthorized());
         mvc.perform(post("/api/broadcasts/" + id + "/stop")).andExpect(status().isUnauthorized());
     }
 
     @Test
     void 타인은_수정_삭제_송출제어_모두_403이고_데이터는_그대로() throws Exception {
+        goLive(id);
         mvc.perform(rename(id).header(HttpHeaders.AUTHORIZATION, bearer(other))).andExpect(status().isForbidden());
-        mvc.perform(post("/api/broadcasts/" + id + "/start").header(HttpHeaders.AUTHORIZATION, bearer(other)))
-                .andExpect(status().isForbidden());
         mvc.perform(post("/api/broadcasts/" + id + "/stop").header(HttpHeaders.AUTHORIZATION, bearer(other)))
                 .andExpect(status().isForbidden());
         mvc.perform(delete("/api/broadcasts/" + id).header(HttpHeaders.AUTHORIZATION, bearer(other)))
@@ -62,16 +60,15 @@ class BroadcastAuthorizationTest extends ApiTestSupport {
 
         mvc.perform(get("/api/broadcasts/" + id))
                 .andExpect(jsonPath("$.title").value("첫 방송"))
-                .andExpect(jsonPath("$.status").value("READY"));
+                .andExpect(jsonPath("$.status").value("LIVE"));
     }
 
     @Test
-    void 소유자는_수정_송출시작_종료_삭제_가능() throws Exception {
+    void 소유자는_수정_종료_삭제_가능() throws Exception {
         String auth = bearer(owner);
         mvc.perform(rename(id).header(HttpHeaders.AUTHORIZATION, auth))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.title").value("바꾼 제목"));
-        mvc.perform(post("/api/broadcasts/" + id + "/start").header(HttpHeaders.AUTHORIZATION, auth))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("LIVE"));
+        goLive(id);
         mvc.perform(post("/api/broadcasts/" + id + "/stop").header(HttpHeaders.AUTHORIZATION, auth))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("ENDED"));
         mvc.perform(delete("/api/broadcasts/" + id).header(HttpHeaders.AUTHORIZATION, auth))

@@ -1,5 +1,6 @@
 package com.livestream.broadcast;
 
+import java.time.Clock;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -9,9 +10,11 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class BroadcastService {
     private final BroadcastRepository broadcasts;
+    private final Clock clock;
 
-    public BroadcastService(BroadcastRepository broadcasts) {
+    public BroadcastService(BroadcastRepository broadcasts, Clock clock) {
         this.broadcasts = broadcasts;
+        this.clock = clock;
     }
 
     /** status가 null이면 전체. */
@@ -43,18 +46,14 @@ public class BroadcastService {
         broadcasts.delete(requireOwner(userId, id));
     }
 
-    /** 송출 제어. 실제 WHIP 연결 종료·MediaMTX 동기화는 D6~D8. */
-    @Transactional
-    public Broadcast start(Long userId, Long id) {
-        Broadcast b = requireOwner(userId, id);
-        b.start();
-        return b;
-    }
-
+    /**
+     * 소유자의 방송 종료. 상태만 ENDED로 바꾸면 StreamStatusSync가 아직 붙어 있는 송출을 끊는다(kick).
+     * 시작은 API가 없다 — 송출이 MediaMTX에 실제로 들어오면 StreamStatusSync가 LIVE로 바꾼다.
+     */
     @Transactional
     public Broadcast stop(Long userId, Long id) {
         Broadcast b = requireOwner(userId, id);
-        b.stop();
+        b.end(clock.instant());
         return b;
     }
 

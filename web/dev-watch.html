@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>시청 (D1 스파이크)</title>
+<title>개발용 시청</title>
 <style>
   body { font-family: system-ui, sans-serif; max-width: 860px; margin: 24px auto; padding: 0 16px; }
   video { width: 100%; background: #000; aspect-ratio: 16/9; }
@@ -12,7 +12,7 @@
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.20/dist/hls.min.js"></script>
 </head>
 <body>
-<h1>시청 (HLS)</h1>
+<h1>개발용 시청 (HLS)</h1>
 <p>
   <label>HLS 서버 <input id="server" size="24"></label>
   <label>스트림 키 <input id="key" value="test" size="10"></label>
@@ -26,7 +26,7 @@ const $ = (id) => document.getElementById(id);
 // http(로컬 실행)면 이 페이지를 연 호스트의 MediaMTX 포트로, https(Caddy)면 같은 출처로
 $('server').value = location.protocol === 'https:' ? location.origin : `http://${location.hostname || 'localhost'}:8888`;
 const log = (m) => { $('log').textContent += new Date().toLocaleTimeString() + ' ' + m + '\n'; };
-if (location.protocol === 'file:') log('⚠ file://로 열면 시청이 안 됩니다(CORS). docker compose up -d 후 http://localhost:8000/watch.html 로 여세요.');
+if (location.protocol === 'file:') log('⚠ file://로 열면 시청이 안 됩니다(CORS). docker compose up -d 후 http://localhost:8000/dev-watch.html 로 여세요.');
 let hls;
 
 function play() {

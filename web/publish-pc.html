@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PC 송출</title>
+<link rel="stylesheet" href="style.css">
+<script src="app.js"></script>
+<script src="whip.js"></script>
+<script src="studio.js"></script>
+</head>
+<body>
+<nav id="nav"></nav>
+<main>
+  <p class="muted">PC 송출 · 화면 + 탭/시스템 소리 + 마이크 · <a href="#" id="to-mobile">모바일 카메라 송출로</a></p>
+  <h1 class="row"><span id="title"></span><span id="status"></span></h1>
+  <p id="hint" class="muted"></p>
+  <video id="preview" autoplay muted playsinline></video>
+  <div class="row" style="margin-top: 12px">
+    <button id="start" class="primary" disabled>방송 시작</button>
+    <button id="end" class="danger" disabled>방송 종료</button>
+    <span id="conn" class="muted">송출 안 함</span>
+    <span class="spacer"></span>
+    <a id="watch-link" target="_blank">시청 화면 열기</a>
+  </div>
+  <label class="row muted" style="margin-top: 8px"><input type="checkbox" id="use-mic" checked style="width: auto"> 마이크 함께 송출</label>
+  <p class="error" id="error"></p>
+  <details class="card">
+    <summary>송출 방법 · 로그</summary>
+    <ol class="muted">
+      <li>「방송 시작」 → 공유 창에서 <b>탭</b>(또는 창·전체 화면)을 고르고 <b>「오디오 공유」를 켭니다</b>. 탭 소리는 Chrome·Edge에서만 됩니다.</li>
+      <li>마이크 권한을 허용하면 화면 소리와 마이크가 한 소리로 섞여 나갑니다.</li>
+      <li>송출이 연결되면 몇 초 안에 상태가 「방송 중」으로 바뀝니다.</li>
+      <li>「방송 종료」를 누르면 방송이 끝납니다. 창을 닫거나 「공유 중지」를 눌렀다면 <b>30초 안에</b> 다시 시작하면 방송이 이어집니다.</li>
+    </ol>
+    <div id="log" class="log"></div>
+  </details>
+</main>
+
+<script>
+// PC 송출: 화면(getDisplayMedia, 탭/시스템 소리 포함) + 마이크(getUserMedia)를 Web Audio로 한 트랙에 섞는다
+async function capturePc(log) {
+  if (!navigator.mediaDevices?.getDisplayMedia) {
+    throw new Error('이 브라우저는 화면 공유를 지원하지 않습니다. PC의 Chrome·Edge를 쓰거나, 휴대폰이면 모바일 카메라 송출을 쓰세요.');
+  }
+  const display = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30 }, audio: true });
+  let mic = null;
+  if (document.getElementById('use-mic').checked) {
+    try {
+      mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    } catch (e) { log('마이크 없음/거부: ' + e.message + ' — 화면 소리만 송출'); }
+  }
+
+  const audioCtx = new AudioContext();
+  const dest = audioCtx.createMediaStreamDestination();
+  for (const s of [display, mic]) {
+    if (s && s.getAudioTracks().length) audioCtx.createMediaStreamSource(s).connect(dest);
+  }
+  const tabAudio = display.getAudioTracks().length, micAudio = mic ? mic.getAudioTracks().length : 0;
+  log(`트랙: 화면 소리 ${tabAudio}개, 마이크 ${micAudio}개`);
+  if (!tabAudio) log('화면 소리 없음 — 공유 창에서 「오디오 공유」를 켜야 탭/시스템 소리가 나갑니다');
+
+  return {
+    stream: new MediaStream([display.getVideoTracks()[0], dest.stream.getAudioTracks()[0]]),
+    stop() {
+      for (const s of [display, mic, dest.stream]) s?.getTracks().forEach((t) => t.stop());
+      audioCtx.close();
+    },
+  };
+}
+
+document.getElementById('to-mobile').href = 'publish-mobile.html' + location.search;
+initStudio({ capture: capturePc });
+</script>
+</body>
+</html>

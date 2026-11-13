@@ -20,12 +20,14 @@
   <!-- 소유자에게만 보인다. 버튼을 숨기는 건 편의일 뿐, 권한은 서버가 매 요청마다 다시 확인한다(타인 403) -->
   <section id="manage" class="card" hidden>
     <h2>방송 관리</h2>
-    <p class="muted">스트림 키 <code id="stream-key"></code> · <a id="publish-link" target="_blank">송출 페이지 열기</a></p>
+    <p class="muted">송출을 시작하면 자동으로 「방송 중」이 되고, 송출이 끊긴 채 30초가 지나면 「종료」됩니다.</p>
     <div class="row">
-      <button id="start" class="primary">방송 시작</button>
+      <a id="publish-pc" class="button primary">PC 화면 송출</a>
+      <a id="publish-mobile" class="button primary">모바일 카메라 송출</a>
       <button id="stop">방송 종료</button>
       <button id="delete" class="danger">삭제</button>
     </div>
+    <p class="muted">스트림 키 <code id="stream-key"></code> (시청 주소에 쓰이는 공개 값 — 송출은 소유자 로그인이 있어야만 됩니다)</p>
     <form id="edit" style="margin-top: 12px">
       <input name="title" maxlength="100" required>
       <textarea name="description" maxlength="1000" rows="3" placeholder="설명 (선택)"></textarea>
@@ -79,8 +81,9 @@ function render(b) {
   $('manage').hidden = !mine;
   if (!mine) return;
   $('stream-key').textContent = b.streamKey;
-  $('publish-link').href = `publish.html?key=${encodeURIComponent(b.streamKey)}`;
-  $('start').disabled = b.status !== 'READY';
+  $('publish-pc').href = `publish-pc.html?id=${b.id}`;
+  $('publish-mobile').href = `publish-mobile.html?id=${b.id}`;
+  for (const a of [$('publish-pc'), $('publish-mobile')]) a.hidden = b.status === 'ENDED';
   $('stop').disabled = b.status !== 'LIVE';
   const form = $('edit');
   if (document.activeElement?.form !== form) { // 입력 중인 값은 덮어쓰지 않는다
@@ -95,8 +98,7 @@ async function load() {
 }
 
 const act = (fn) => async () => { try { render(await fn()); } catch (err) { showError(err); } };
-$('start').onclick = act(() => api(`/api/broadcasts/${id}/start`, { method: 'POST' }));
-$('stop').onclick = act(() => api(`/api/broadcasts/${id}/stop`, { method: 'POST' }));
+$('stop').onclick = () => confirm('방송을 종료할까요? 송출 중이면 송출도 끊깁니다.') && act(() => api(`/api/broadcasts/${id}/stop`, { method: 'POST' }))();
 $('edit').onsubmit = (e) => {
   e.preventDefault();
   const f = new FormData(e.target);

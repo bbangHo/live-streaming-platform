@@ -17,3 +17,11 @@ app:
     secret: ${JWT_SECRET:}
     access-ttl: ${JWT_ACCESS_TTL:15m}
     refresh-ttl: ${JWT_REFRESH_TTL:14d}
+  media:
+    api-url: ${MEDIAMTX_API_URL:http://localhost:9997}
+    # MediaMTX authHTTPAddress의 ?secret= 값과 같아야 한다. 비면 송출 인증을 전부 거부
+    hook-secret: ${MEDIA_HOOK_SECRET:}
+    # DB에 없는 스트림 키로도 송출 허용(개발용 dev-publish.html). 배포 시 false
+    dev-bypass: ${STREAM_DEV_BYPASS:false}
+    grace: ${STREAM_GRACE:30s}
+    sync-enabled: ${STREAM_SYNC_ENABLED:true}

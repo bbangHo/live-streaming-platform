@@ -1,5 +1,5 @@
 // @ts-check
-// 화면으로 하는 방송 관리 E2E: 가입 → 방송 만들기 → 목록·상세 → 수정 → 시작/종료 → 타인·비로그인 화면과 서버 거부 → 삭제
+// 화면으로 하는 방송 관리 E2E: 가입 → 방송 만들기 → 목록·상세 → 수정 → 송출 링크 → 타인·비로그인 화면과 서버 거부 → 삭제
 // 백엔드가 필요하므로 `docker compose up -d` 상태(http://localhost:8000)에서 돈다. 백엔드가 없으면 건너뛴다.
 const { test, expect } = require('@playwright/test');
 
@@ -44,15 +44,13 @@ test('방송 관리: 소유자만 화면·서버 모두 변경 가능', async ({
   await page.getByRole('button', { name: '수정 저장' }).click();
   await expect(page.locator('#title')).toHaveText(`${title} (수정)`);
 
-  // 시작 → 목록 '방송 중' 탭에 보임 → 종료
-  await page.getByRole('button', { name: '방송 시작' }).click();
-  await expect(page.locator('#status')).toHaveText('방송 중');
+  // 목록 '전체'에 대기 상태로 보이고, 소유자 관리 영역에 PC·모바일 송출 링크가 있다 (송출·상태 전이는 broadcast-publish.spec.js)
+  await expect(page.locator('#status')).toHaveText('대기');
+  await expect(page.getByRole('link', { name: 'PC 화면 송출' })).toHaveAttribute('href', `publish-pc.html?id=${id}`);
+  await expect(page.getByRole('link', { name: '모바일 카메라 송출' })).toHaveAttribute('href', `publish-mobile.html?id=${id}`);
   await page.goto(`${BASE}/index.html`);
-  await page.getByRole('button', { name: '방송 중' }).click();
   await expect(page.locator('#list')).toContainText(`${title} (수정)`);
   await page.goto(`${BASE}/broadcast.html?id=${id}`);
-  await page.getByRole('button', { name: '방송 종료' }).click();
-  await expect(page.locator('#status')).toHaveText('종료');
 
   // 비로그인: 상세는 보이지만 관리 영역 없음, API로 직접 수정하면 401
   await page.getByRole('button', { name: '로그아웃' }).click();

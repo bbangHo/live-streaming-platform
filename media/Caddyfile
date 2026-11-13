@@ -8,10 +8,15 @@
 		reverse_proxy mediamtx:8889
 	}
 
-	# HLS 재생목록·세그먼트
+	# 내부 전용(MediaMTX → 백엔드 송출 인증). 밖에서는 막는다
+	handle /api/internal/* {
+		respond 404
+	}
+
 	handle /api/* {
 		reverse_proxy backend:8080
 	}
+	# HLS 재생목록·세그먼트
 	handle /live/* {
 		reverse_proxy mediamtx:8888
 	}
