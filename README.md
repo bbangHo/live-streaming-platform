@@ -3,7 +3,7 @@
 치지직 같은 실시간 라이브 방송 송출·시청 웹 서비스. (Codemit 공모전 제출작)
 
 > 상태: **개발 중** · 마감 2026-11-19 23:59 · 평가 기준·계획은 [PLAN.md](./PLAN.md) 참고
-> 현재 구현: 회원가입·로그인(JWT)·소유자 인가, 방송 등록·목록·상세(시청)·수정·삭제, **PC 화면 송출**(화면 + 탭/시스템 소리 + 마이크)·**모바일 카메라 송출**(WHIP) → MediaMTX → HLS 시청, **송출 권한 서버 검증**(방송 소유자 토큰만 송출 가능), **방송 상태 자동 연동**(송출이 들어오면 방송 중, 끊긴 채 30초면 종료). **댓글**(작성자만 수정·삭제), **녹화·다시보기**(자동 녹화, 위치 DB 저장, 재생, 소유자 삭제). 선택 기능 도네이션은 개발 중.
+> 현재 구현: 회원가입·로그인(JWT)·소유자 인가, 방송 등록·목록·상세(시청)·수정·삭제, **PC 화면 송출**(화면 + 탭/시스템 소리 + 마이크)·**모바일 카메라 송출**(WHIP) → MediaMTX → HLS 시청, **송출 권한 서버 검증**(방송 소유자 토큰만 송출 가능), **방송 상태 자동 연동**(송출이 들어오면 방송 중, 끊긴 채 30초면 종료). **댓글**(작성자만 수정·삭제), **녹화·다시보기**(자동 녹화, 위치 DB 저장, 재생, 소유자 삭제), **도네이션**(테스트 결제, 서버 승인 검증, 중복 적립 방지, 합계).
 
 ---
 
@@ -60,6 +60,7 @@ docker compose up -d
 | `JWT_SECRET` | (비어 있음) | access token 서명 키, 32자 이상. 비우면 기동마다 임의 키(재시작하면 다시 로그인) |
 | `MEDIA_HOOK_SECRET` | 로컬 기본값 | MediaMTX → 백엔드 송출 인증 요청에 붙는 공유 비밀값. **배포 시 반드시 .env로 지정** |
 | `STREAM_DEV_BYPASS` | `true` | 등록 안 된 스트림 키(개발용 페이지)로도 로그인 없이 송출 허용. **배포 시 `false`** |
+| `TOSS_CLIENT_KEY` / `TOSS_SECRET_KEY` | (비어 있음) | 도네이션용 [토스페이먼츠](https://developers.tosspayments.com) **테스트** 키. 비우면 내장 테스트 결제창 |
 
 ### Docker 없이 실행
 MediaMTX 바이너리를 받아 직접 띄웁니다 → [media/README.md](./media/README.md)
@@ -92,6 +93,15 @@ python -m http.server 8000 --bind 127.0.0.1 -d web
 3. 녹화 상세에서 바로 재생·탐색되고, **저장 위치**(파일 경로)가 보입니다. `docker compose down` → `up` 후에도 목록·재생이 유지됩니다(DB·녹화 볼륨).
 4. **녹화 삭제**는 방송 소유자에게만 보이고(파일도 삭제), 타인은 API로 시도해도 403입니다.
 - 개발용 페이지(`dev-publish.html`)의 미등록 키 송출도 파일은 녹화되지만 DB에는 저장하지 않습니다(목록에 안 나옴).
+
+### 도네이션 (선택 기능)
+1. `demo2`로 로그인 → `demo1`의 방송 상세 → **후원**에서 금액(1,000원~)·메시지 → **후원하기**. (내 방송에는 후원 버튼이 없습니다)
+2. **테스트 결제창**: 토스 키가 없으면 내장 테스트 결제창이 뜹니다 → 카드 `4242 4242 4242 4242` → **결제하기**. (`TOSS_CLIENT_KEY`·`TOSS_SECRET_KEY`에 토스페이먼츠 **테스트** 키를 넣으면 토스 결제창으로 바뀝니다. 어느 쪽도 실제 돈은 나가지 않습니다)
+3. 결과 페이지 「5,000원 후원 완료」 → 방송 화면의 **후원 합계·최근 후원**에 반영(다른 시청자 화면에도 5초 안에).
+4. **중복 적립 방지 확인:** 결과 페이지를 **새로고침**(같은 승인 요청 반복)해도 「후원 완료」만 다시 뜨고 합계는 그대로입니다.
+5. **서버 검증 확인:** 결제창 주소의 `amount`를 바꿔 결제하면 「주문 금액과 다름」으로 거부, 거절 카드 `4000 0000 0000 0002`면 「승인되지 않았습니다」 — 둘 다 합계에 안 더해집니다.
+
+흐름: ① 주문 생성(서버가 금액 기억, 상태 `PENDING`) → ② 결제창(PG가 `paymentKey` 발급) → ③ `POST /api/donations/confirm` — 서버가 주문 금액 대조·주문자 확인 → PG 승인 API 호출(토스는 `Idempotency-Key`=주문 번호) → 승인 금액까지 맞으면 그 주문 **한 행만** `DONE`. 주문 행을 잠그고(`SELECT … FOR UPDATE`) `PENDING`일 때만 바꾸므로 동시에 여러 번 와도 한 번만 적립되고, 합계는 `DONE` 행의 합으로 계산합니다(따로 올리는 카운터 없음) → [DonationService](./server/src/main/java/com/livestream/donation/DonationService.java)
 
 ### 모바일 송출 (카메라 + 마이크)
 휴대폰 브라우저는 `localhost`가 아니면 **HTTPS에서만** 카메라를 엽니다. 같은 와이파이의 PC에서 HTTPS 프로필로 띄웁니다:
@@ -143,6 +153,10 @@ curl -i -X POST http://localhost:8000/live/$KEY/whip -H 'Content-Type: applicati
 | `PATCH /api/comments/{id}`, `DELETE /api/comments/{id}` | **작성자** | 댓글 수정·삭제. 타인(방송 소유자 포함) 403, 비로그인 401 |
 | `GET /api/recordings`, `GET /api/recordings/{id}`, `GET /api/broadcasts/{id}/recordings` | 공개 | 녹화 목록(최신순)·상세·방송별 목록. `filePath`(저장 위치), `startedAt`, `durationMs`, `playbackPath`(재생 주소) |
 | `DELETE /api/recordings/{id}` | **방송 소유자** | 녹화 삭제(파일 + DB). 타인 403 |
+| `GET /api/broadcasts/{id}/donations` | 공개 | 후원 합계 `{total, count, recent[]}` (승인된 것만) |
+| `POST /api/broadcasts/{id}/donations` | 로그인 | `{amount, message?}` 주문 생성 → `{orderId, amount, orderName, provider, clientKey}`. 금액 1,000~1,000,000원, 본인 방송 400 |
+| `POST /api/donations/confirm` | 로그인(**주문자**) | `{paymentKey, orderId, amount}` 승인 → 200 `DONE` / 402 `FAILED`(PG 거절). 금액 불일치 400, 남의 주문 403, 다른 결제로 이미 승인·이미 쓴 결제 키 409. 같은 요청 반복은 같은 결과(재적립 없음) |
+| `GET /api/payments/config`, `POST /api/test-pg/pay` | 공개 | 결제창 종류(`toss`/`test`), 내장 테스트 PG 결제창의 카드 결제(적립은 confirm에서만) |
 | `POST /live/{streamKey}/whip` | **소유자** (Bearer) | WHIP 송출(MediaMTX). 토큰 없음·타인·종료된 방송 401, 같은 방송 두 번째 송출 거부 |
 
 인가는 전부 서버에서 합니다: 로그인 여부는 [SecurityConfig](./server/src/main/java/com/livestream/config/SecurityConfig.java), 소유자는 [BroadcastService.requireOwner](./server/src/main/java/com/livestream/broadcast/BroadcastService.java). 오류 응답은 `{"status":403,"detail":"..."}` 형식(RFC 9457).
@@ -153,7 +167,7 @@ cd server
 ./gradlew test
 ```
 - JDK 21 + **Docker 필요** (Testcontainers가 실제 PostgreSQL을 띄워 Flyway 스키마로 돌립니다).
-- 검증 범위: 가입·로그인·내정보·재발급(회전)·로그아웃, 중복 아이디 409, 잘못된 입력 400, 틀린 비번/없는 아이디 401, 위조·만료 토큰 거부, 테스트 계정 로그인, 방송 인가 **비로그인 401 / 타인 403(데이터 불변) / 소유자 허용**, 방송 등록(스트림 키·HLS 주소)·수정·상태 필터·상태 전이 409·입력 검증 400, **송출 인증**(소유자 토큰만 허용, 토큰 없음·위조·타인·종료된 방송·등록 안 된 키 거부, hook secret 불일치 403), **상태 동기화**(송출 들어오면 방송 중, 끊김 30초 유예·재접속 시 유지, 초과 시 종료, 종료된 방송의 송출 끊기), **댓글**(공개 조회·새 댓글만 조회, 로그인 작성, 작성자만 수정·삭제 — 타인·방송 소유자 403, 입력 검증, 방송 삭제 시 함께 삭제), **녹화**(완료 알림 저장·중복 알림 1회만 저장·파일 이름에서 시작 시각, 미등록 키 무시, 비밀값 검증, 공개 목록·재생 주소, 삭제는 방송 소유자만).
+- 검증 범위: 가입·로그인·내정보·재발급(회전)·로그아웃, 중복 아이디 409, 잘못된 입력 400, 틀린 비번/없는 아이디 401, 위조·만료 토큰 거부, 테스트 계정 로그인, 방송 인가 **비로그인 401 / 타인 403(데이터 불변) / 소유자 허용**, 방송 등록(스트림 키·HLS 주소)·수정·상태 필터·상태 전이 409·입력 검증 400, **송출 인증**(소유자 토큰만 허용, 토큰 없음·위조·타인·종료된 방송·등록 안 된 키 거부, hook secret 불일치 403), **상태 동기화**(송출 들어오면 방송 중, 끊김 30초 유예·재접속 시 유지, 초과 시 종료, 종료된 방송의 송출 끊기), **댓글**(공개 조회·새 댓글만 조회, 로그인 작성, 작성자만 수정·삭제 — 타인·방송 소유자 403, 입력 검증, 방송 삭제 시 함께 삭제), **녹화**(완료 알림 저장·중복 알림 1회만 저장·파일 이름에서 시작 시각, 미등록 키 무시, 비밀값 검증, 공개 목록·재생 주소, 삭제는 방송 소유자만), **도네이션**(승인 시 합계 반영, 같은 승인 반복·**동시 승인 8건 → 1회 적립**, 다른 결제 키·이미 쓴 결제 키 409, 금액 조작 400, 카드 거절 402·적립 없음, 남의 주문 403, 금액 범위·본인 방송, 토스 승인 API 호출 형식(Basic 인증·Idempotency-Key)과 성공·거절·서버 오류 처리).
 - ⚠️ Windows에서 프로젝트 경로에 **한글**이 있으면 Gradle 테스트 워커가 `ClassNotFoundException`으로 실패합니다. 영문 경로에 두거나 `./gradlew test -Dorg.gradle.jvmargs=-Dfile.encoding=MS949`로 실행하세요.
 
 ### 자동 E2E 테스트
@@ -165,7 +179,7 @@ npm run test:e2e
 - `docker compose up -d` 상태면 그 스택을 쓰고, 아니면 MediaMTX 바이너리·python 서버를 직접 띄웁니다.
 - 테스트 중 스피커에서 삐 소리가 납니다.
 - 다른 주소 대상: `E2E_BASE=https://<도메인> npm run test:e2e`
-- `tests/broadcast-crud.spec.js`: **화면으로** 가입 → 방송 만들기 → 수정 → 송출 링크 → 비로그인·`demo2` 화면에 관리 영역 없음 + API 직접 호출 401/403 → 소유자 삭제. 댓글 작성 → 비로그인 조회 → 방송 소유자도 남의 댓글 403 → 작성자 수정·삭제가 다른 화면에 반영.
+- `tests/broadcast-crud.spec.js`: **화면으로** 가입 → 방송 만들기 → 수정 → 송출 링크 → 비로그인·`demo2` 화면에 관리 영역 없음 + API 직접 호출 401/403 → 소유자 삭제. 댓글 작성 → 비로그인 조회 → 방송 소유자도 남의 댓글 403 → 작성자 수정·삭제가 다른 화면에 반영. 후원 테스트 결제 → 완료 → 결과 새로고침해도 합계 그대로 → 거절 카드·결제창 금액 조작은 실패하고 합계 그대로 → 소유자에게는 후원 버튼 없음.
 - `tests/broadcast-publish.spec.js`: **PC 송출 페이지**에서 진짜 탭 캡처 송출 → 서버가 자동으로 방송 중 → 비로그인 시청자가 목록 '방송 중' 탭 → 상세에서 재생 → 토큰 없음·타인 토큰·두 번째 송출 거부 → 소유자 종료 → HLS 사라짐·시청 화면 종료 → 종료된 방송 재송출 거부. **모바일 송출 페이지**(가짜 카메라)로 송출 → 방송 중 → 종료 → 녹화가 상세 '다시보기'에 생김 → 비로그인이 다시보기 목록에서 재생 → 타인 삭제 403 → 소유자 삭제 시 파일까지 사라짐. 비로그인·타인의 송출 페이지 접근 차단.
 - 위 두 파일은 백엔드가 필요해 `docker compose up -d` 상태에서만 돌고, 없으면 건너뜁니다. `broadcast-loop.spec.js`는 개발용 페이지(`dev-publish.html`)로 소리 믹싱·지연을 숫자로 판정합니다.
 
@@ -191,3 +205,4 @@ npm run test:e2e
 - [JJWT](https://github.com/jwtk/jjwt) (Apache-2.0) — JWT 발급·검증
 - [PostgreSQL](https://www.postgresql.org) (PostgreSQL License) — Docker 이미지, JDBC 드라이버(BSD-2)
 - [Testcontainers](https://testcontainers.com) (MIT) — 백엔드 테스트
+- [토스페이먼츠 JavaScript SDK v2](https://docs.tosspayments.com) — 토스 키를 넣었을 때만 CDN으로 로드 (결제 승인 API는 서버에서 직접 호출)

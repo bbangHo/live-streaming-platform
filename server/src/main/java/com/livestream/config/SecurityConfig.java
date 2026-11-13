@@ -34,7 +34,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/auth/signup", "/api/auth/login",
                                 "/api/auth/refresh", "/api/auth/logout").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/broadcasts", "/api/broadcasts/*", "/api/broadcasts/*/comments",
-                                "/api/broadcasts/*/recordings", "/api/recordings", "/api/recordings/*").permitAll()
+                                "/api/broadcasts/*/recordings", "/api/recordings", "/api/recordings/*",
+                                "/api/broadcasts/*/donations", "/api/payments/config").permitAll()
+                        // 내장 테스트 PG의 결제창(실제 PG 결제창 역할). 적립은 로그인한 /api/donations/confirm에서만
+                        .requestMatchers(HttpMethod.POST, "/api/test-pg/pay").permitAll()
                         // MediaMTX → 백엔드 송출 인증. 로그인 대신 hook secret으로 확인(StreamAuthController), 외부 프록시에서는 막힘
                         .requestMatchers(HttpMethod.POST, "/api/internal/media/auth", "/api/internal/media/recordings").permitAll()
                         .requestMatchers("/error").permitAll()

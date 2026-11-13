@@ -52,3 +52,7 @@ dl.info { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; 
 dl.info dt { color: var(--muted); }
 dl.info dd { margin: 0; overflow-wrap: anywhere; }
 nav a { text-decoration: none; }
+.accent { color: var(--accent); }
+.big { font-size: 1.6em; font-weight: 700; margin: 4px 0 12px; }
+#donations { margin: 16px 0; }
+#donation-list { max-height: 200px; overflow: auto; margin-bottom: 8px; }

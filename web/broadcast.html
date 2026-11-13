@@ -17,6 +17,26 @@
   <p id="description" style="white-space: pre-wrap"></p>
   <p class="error" id="error"></p>
 
+  <section id="donations" class="card">
+    <h2>후원 <span id="donation-total" class="accent"></span> <span id="donation-count" class="muted"></span></h2>
+    <ul id="donation-list" class="plain"></ul>
+    <form id="donation-form" hidden>
+      <div class="row">
+        <button type="button" data-amount="1000">1,000원</button>
+        <button type="button" data-amount="5000">5,000원</button>
+        <button type="button" data-amount="10000">10,000원</button>
+        <input name="amount" type="number" min="1000" max="1000000" step="100" value="1000" required style="width: 9em"> 원
+      </div>
+      <div class="row nowrap">
+        <input name="message" maxlength="200" placeholder="응원 메시지 (선택)" autocomplete="off">
+        <button class="primary">후원하기</button>
+      </div>
+      <p class="muted" id="donation-mode"></p>
+    </form>
+    <p id="donation-login" class="muted" hidden><a id="donation-login-link">로그인</a>하면 후원할 수 있습니다.</p>
+    <p class="error" id="donation-error"></p>
+  </section>
+
   <section id="recordings" class="card" hidden>
     <h2>다시보기</h2>
     <ul id="recording-list" class="plain"></ul>
@@ -195,15 +215,74 @@ $('comment-form').onsubmit = (e) => {
     .then(() => { $('comment-list').scrollTop = $('comment-list').scrollHeight; });
 };
 
+// ── 후원: 합계·최근 후원은 누구나. 결제 승인·적립은 서버만 한다(donate-result.html → /api/donations/confirm) ──
+const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`;
+
+async function loadDonations() {
+  try {
+    const s = await api(`/api/broadcasts/${encodeURIComponent(id)}/donations`);
+    $('donation-total').textContent = s.total ? won(s.total) : '';
+    $('donation-count').textContent = s.count ? `${s.count}건` : '';
+    $('donation-list').replaceChildren(...s.recent.map((d) => el('li', {},
+      el('b', {}, d.donorUsername ?? '알 수 없음'), ` ${won(d.amount)}`,
+      d.message ? el('span', { className: 'muted' }, ` — ${d.message}`) : null)));
+  } catch { /* 방송이 없으면 위의 오류 표시로 충분 */ }
+}
+
+document.querySelectorAll('#donation-form [data-amount]').forEach((b) => b.onclick = () => {
+  $('donation-form').elements.amount.value = b.dataset.amount;
+});
+
+$('donation-form').onsubmit = async (e) => {
+  e.preventDefault();
+  $('donation-error').textContent = '';
+  const f = e.target.elements;
+  try {
+    // 1) 서버에 주문을 만든다 — 금액은 서버가 기억하고, 승인 때 다시 대조한다
+    const order = await api(`/api/broadcasts/${id}/donations`, { method: 'POST', body: { amount: Number(f.amount.value), message: f.message.value || null } });
+    const back = new URL('donate-result.html', location.href);
+    back.searchParams.set('broadcast', id);
+    // 2) 결제창: 토스 키가 있으면 토스페이먼츠(테스트) 결제창, 없으면 내장 테스트 결제창
+    if (order.provider === 'toss') {
+      await loadScript('https://js.tosspayments.com/v2/standard');
+      const payment = TossPayments(order.clientKey).payment({ customerKey: TossPayments.ANONYMOUS });
+      await payment.requestPayment({
+        method: 'CARD', amount: { currency: 'KRW', value: order.amount },
+        orderId: order.orderId, orderName: order.orderName,
+        successUrl: back.href, failUrl: back.href,
+      });
+    } else {
+      const checkout = new URL('test-checkout.html', location.href);
+      for (const [k, v] of Object.entries({ orderId: order.orderId, amount: order.amount, orderName: order.orderName, back: back.href })) checkout.searchParams.set(k, v);
+      location.href = checkout.href;
+    }
+  } catch (err) { $('donation-error').textContent = err.message; }
+};
+
+function loadScript(src) {
+  return new Promise((ok, fail) => document.head.append(el('script', { src, onload: ok, onerror: () => fail(new Error('결제 모듈을 불러오지 못했습니다')) })));
+}
+
 renderNav().then((u) => {
   me = u;
   $('comment-form').hidden = !me;
   $('comment-login').hidden = !!me;
   $('comment-login-link').href = `login.html?next=${encodeURIComponent('broadcast.html?id=' + id)}`;
-  return Promise.all([load(), loadComments(), loadRecordings()]);
+  api('/api/payments/config').then((c) => {
+    $('donation-mode').textContent = c.provider === 'toss' ? '토스페이먼츠 테스트 결제창으로 이동합니다 (실제 돈이 나가지 않음).'
+      : '내장 테스트 결제창으로 이동합니다 (실제 돈이 나가지 않음).';
+  }).catch(() => {});
+  return Promise.all([load(), loadComments(), loadRecordings(), loadDonations()]).then(() => {
+    // 내 방송에는 후원 버튼 대신 합계만
+    const mine = me && current && me.id === current.ownerId;
+    $('donation-form').hidden = !me || mine;
+    $('donation-login').hidden = !!me;
+    $('donation-login-link').href = `login.html?next=${encodeURIComponent('broadcast.html?id=' + id)}`;
+  });
 });
 setInterval(load, 5000); // 방송 시작·종료를 시청자 화면에 반영
 setInterval(loadComments, 3000);
+setInterval(loadDonations, 5000);
 setInterval(() => current?.status !== 'READY' && loadRecordings(), 10000);
 </script>
 </body>

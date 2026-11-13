@@ -61,7 +61,7 @@
 |---|---|---|
 | 댓글 작성/조회/수정/삭제 + 작성자 권한 ✅ | REST CRUD, 화면은 3초 주기 갱신. 조회 공개 / 작성 로그인 / 수정·삭제 **작성자만**(방송 소유자도 남의 댓글 불가, 서버 403) | `GET·POST /api/broadcasts/{id}/comments`, `PATCH·DELETE /api/comments/{id}` → [CommentService.requireAuthor](server/src/main/java/com/livestream/comment/CommentService.java), 화면 [broadcast.html](web/broadcast.html), 테스트 [CommentTest](server/src/test/java/com/livestream/comment/CommentTest.java)·[broadcast-crud.spec.js](tests/broadcast-crud.spec.js) |
 | 녹화 저장 / 목록·상세·재생 / 위치 영구저장 ✅ | MediaMTX `record: yes`(fMP4, `recordings` 볼륨) → 파일 완성 시 `runOnRecordSegmentComplete`([record-hook.sh](media/record-hook.sh))가 백엔드에 알림 → `recordings` 테이블에 **파일 위치·시작 시각·길이** 저장(같은 파일 중복 저장 안 함). 재생은 MediaMTX playback 서버(`/playback/get?...&format=mp4`). 목록·상세 공개, 삭제는 방송 소유자(파일도 삭제) | [RecordingService](server/src/main/java/com/livestream/recording/RecordingService.java), [RecordingController](server/src/main/java/com/livestream/recording/RecordingController.java), [V6__recordings.sql](server/src/main/resources/db/migration/V6__recordings.sql), 화면 [recordings.html](web/recordings.html)·[recording.html](web/recording.html)·상세의 '다시보기', 테스트 [RecordingTest](server/src/test/java/com/livestream/recording/RecordingTest.java)·[broadcast-publish.spec.js](tests/broadcast-publish.spec.js) |
-| 도네이션: 테스트결제/서버검증/중복적립 방지/합계 | PG 테스트모드 + **멱등키**(중복 승인 1회만) + ledger | 멱등성 명시 채점 |
+| 도네이션: 테스트결제/서버검증/중복적립 방지/합계 ✅ | **테스트 결제**: 토스페이먼츠 테스트 키(`TOSS_*`)면 토스 결제창, 없으면 내장 테스트 PG(같은 흐름: 결제창 → paymentKey → 가맹점 서버 승인). **서버 검증**: 주문 금액은 서버가 정하고 승인 때 대조(조작 400), 주문자 본인만(403), PG 승인·승인 금액 확인. **중복 적립 방지**: 주문 행 잠금(FOR UPDATE) + PENDING→DONE 한 번만 + 이미 DONE이면 같은 결과만 반환 + `payment_key` UNIQUE + 토스 Idempotency-Key. **합계**: DONE 행 SUM(카운터 없음) | [DonationService](server/src/main/java/com/livestream/donation/DonationService.java), [TossPaymentGateway](server/src/main/java/com/livestream/payment/TossPaymentGateway.java), [TestPaymentGateway](server/src/main/java/com/livestream/payment/TestPaymentGateway.java), [V7__donations.sql](server/src/main/resources/db/migration/V7__donations.sql), 화면 [broadcast.html](web/broadcast.html)·[test-checkout.html](web/test-checkout.html)·[donate-result.html](web/donate-result.html), 테스트 [DonationTest](server/src/test/java/com/livestream/donation/DonationTest.java)(동시 승인 8건 → 1회 적립)·[TossPaymentGatewayTest](server/src/test/java/com/livestream/payment/TossPaymentGatewayTest.java)·[broadcast-crud.spec.js](tests/broadcast-crud.spec.js) |
 
 ---
 
@@ -77,8 +77,8 @@
 - D6-7: PC 송출(화면+소리+마이크 믹싱) 완성 ✅ (송출 인증·상태 자동 연동 포함)
 - D8: 모바일 송출 + 상태관리/종료 처리 ✅ (D6에 함께 — 실기기 확인은 D9)
 - D9: 교차기기 시청 검증 + 예외처리 + README
-- D10-11: 선택기능 (댓글 → 녹화)
-- D12: 도네이션(여유 시) + 버퍼
+- D10-11: 선택기능 (댓글 → 녹화) ✅
+- D12: 도네이션 ✅ + 버퍼
 - D13: **최종 배포·테스트계정·README 점검** → **레포 public 확인** → 제출
 
 > 평가 우선순위: **기능 완결성 > 인증/인가 > 코드품질 > 문서화 > 선택가산**. 필수 100% 먼저, 선택은 그다음.

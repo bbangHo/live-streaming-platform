@@ -44,6 +44,9 @@ services:
       MEDIA_HOOK_SECRET: ${MEDIA_HOOK_SECRET:-local-media-hook-secret}   # MediaMTX와 같은 값. 배포 시 .env로 바꾼다
       # 등록 안 된 스트림 키(dev-publish.html의 test 등)로도 송출 허용. 로컬 개발용 — 배포 시 .env에 false
       STREAM_DEV_BYPASS: ${STREAM_DEV_BYPASS:-true}
+      # 도네이션: 토스페이먼츠 테스트 키(개발자센터에서 무료 발급). 비우면 내장 테스트 PG
+      TOSS_CLIENT_KEY: ${TOSS_CLIENT_KEY:-}
+      TOSS_SECRET_KEY: ${TOSS_SECRET_KEY:-}
     ports:
       - "${API_PORT:-8080}:8080"
 

@@ -25,3 +25,8 @@ app:
     dev-bypass: ${STREAM_DEV_BYPASS:false}
     grace: ${STREAM_GRACE:30s}
     sync-enabled: ${STREAM_SYNC_ENABLED:true}
+  payment:
+    # 토스페이먼츠 테스트 키 (개발자센터 → API 키). 둘 다 있으면 토스 결제창, 없으면 내장 테스트 PG
+    toss-client-key: ${TOSS_CLIENT_KEY:}
+    toss-secret-key: ${TOSS_SECRET_KEY:}
+    toss-api-url: ${TOSS_API_URL:https://api.tosspayments.com}

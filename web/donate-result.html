@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>후원 결과</title>
+<link rel="stylesheet" href="style.css">
+<script src="app.js"></script>
+</head>
+<body>
+<nav id="nav"></nav>
+<main style="max-width: 480px">
+  <section class="card">
+    <h2 id="headline">결제 확인 중…</h2>
+    <p id="detail" class="muted"></p>
+    <p><a id="back" class="button">방송으로 돌아가기</a></p>
+  </section>
+</main>
+<script>
+// 결제창(토스 또는 내장 테스트 PG)이 돌려보내는 페이지.
+// 성공: ?paymentKey&orderId&amount → 서버에 승인 요청. 서버가 주문 금액 대조 + PG 승인 확인을 하고, 그때만 적립한다.
+// 이 페이지를 새로고침해 같은 요청이 다시 가도 서버는 같은 결과를 돌려줄 뿐 두 번 적립하지 않는다.
+const $ = (id) => document.getElementById(id);
+const q = new URLSearchParams(location.search);
+const won = (n) => `${Number(n).toLocaleString('ko-KR')}원`;
+$('back').href = `broadcast.html?id=${encodeURIComponent(q.get('broadcast') ?? '')}`;
+
+async function run() {
+  if (q.get('code')) { // 결제창에서 취소·실패
+    $('headline').textContent = '결제하지 않았습니다';
+    $('detail').textContent = q.get('message') ?? q.get('code');
+    return;
+  }
+  try {
+    const d = await api('/api/donations/confirm', { method: 'POST', body: { paymentKey: q.get('paymentKey'), orderId: q.get('orderId'), amount: Number(q.get('amount')) } });
+    $('headline').textContent = `${won(d.amount)} 후원 완료`;
+    $('detail').textContent = d.message ? `메시지: ${d.message}` : '감사합니다!';
+  } catch (err) {
+    $('headline').textContent = '후원 실패';
+    // 402 = PG가 거절(카드 거절 등) — 본문에 사유. 그 밖은 서버 검증 실패(금액 불일치 400, 남의 주문 403 등)
+    $('detail').textContent = err.status === 402 ? `결제가 승인되지 않았습니다: ${err.body?.failReason ?? ''}` : err.message;
+  }
+}
+
+renderNav().then((me) => me ? run() : ($('headline').textContent = '로그인이 필요합니다'));
+</script>
+</body>
+</html>

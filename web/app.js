@@ -38,6 +38,7 @@ async function api(path, { method = 'GET', body } = {}, retried = false) {
     const problem = await res.json().catch(() => ({}));
     const err = new Error(problem.detail || `요청 실패 (${res.status})`);
     err.status = res.status;
+    err.body = problem;
     throw err;
   }
   return res.status === 204 ? null : res.json();

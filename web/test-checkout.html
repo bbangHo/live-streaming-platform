@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>테스트 결제창</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main style="max-width: 420px">
+  <!-- 토스 키가 없을 때 쓰는 내장 테스트 PG의 결제창. 실제 PG 결제창 자리에 있다:
+       카드 결제 → PG가 paymentKey 발급 → 가맹점(successUrl)으로 돌려보냄 → 가맹점 서버가 승인 확인해야 적립 -->
+  <section class="card">
+    <p class="muted">테스트 결제창 · 실제 돈이 나가지 않습니다</p>
+    <h2 id="name"></h2>
+    <p class="big" id="amount"></p>
+    <form id="pay">
+      <label class="muted">카드 번호 (테스트)
+        <input name="card" inputmode="numeric" value="4242 4242 4242 4242" required>
+      </label>
+      <p class="muted">승인: <code>4242 4242 4242 4242</code> · 거절: <code>4000 0000 0000 0002</code></p>
+      <button class="primary">결제하기</button>
+      <button type="button" id="cancel">취소</button>
+      <p class="error" id="error"></p>
+    </form>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const q = new URLSearchParams(location.search);
+const back = new URL(q.get('back') || 'index.html', location.href);
+// 다른 사이트로 돌려보내지 않는다 (open redirect 방지)
+if (back.origin !== location.origin) back.href = new URL('index.html', location.href).href;
+$('name').textContent = q.get('orderName');
+$('amount').textContent = `${Number(q.get('amount')).toLocaleString('ko-KR')}원`;
+
+$('pay').onsubmit = async (e) => {
+  e.preventDefault();
+  $('error').textContent = '';
+  const res = await fetch('/api/test-pg/pay', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ orderId: q.get('orderId'), amount: Number(q.get('amount')), cardNumber: e.target.elements.card.value.replace(/\D/g, '') }),
+  });
+  if (!res.ok) { $('error').textContent = '카드 번호를 확인하세요 (숫자 16자리)'; return; }
+  const { paymentKey } = await res.json();
+  // 토스 successUrl과 같은 모양으로 돌려보낸다: ?paymentKey&orderId&amount
+  for (const [k, v] of Object.entries({ paymentKey, orderId: q.get('orderId'), amount: q.get('amount') })) back.searchParams.set(k, v);
+  location.replace(back.href);
+};
+$('cancel').onclick = () => {
+  for (const [k, v] of Object.entries({ code: 'PAY_PROCESS_CANCELED', message: '사용자가 결제를 취소했습니다', orderId: q.get('orderId') })) back.searchParams.set(k, v);
+  location.replace(back.href);
+};
+</script>
+</body>
+</html>

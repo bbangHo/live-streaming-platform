@@ -117,3 +117,59 @@ test('댓글: 비로그인 조회, 로그인 작성, 작성자만 수정·삭제
   await expect(anon.locator('#comment-list')).not.toContainText(text, { timeout: 5000 });
   await anon.close();
 });
+
+test('후원: 테스트 결제 → 서버 승인 → 합계, 새로고침해도 한 번만 적립, 카드 거절·금액 조작은 적립 안 됨', async ({ page, request }) => {
+  const summary = async () => (await request.get(`${BASE}/api/broadcasts/1/donations`)).json();
+  const before = (await summary()).total;
+
+  // demo2가 demo1의 시연 방송(1번)에 5,000원 후원
+  await login(page, 'demo2', 'demo1234');
+  await page.goto(`${BASE}/broadcast.html?id=1`);
+  const message = `E2E 후원 ${Date.now()}`;
+  await page.getByRole('button', { name: '5,000원' }).click();
+  await page.getByPlaceholder('응원 메시지 (선택)').fill(message);
+  await page.getByRole('button', { name: '후원하기' }).click();
+  await expect(page).toHaveURL(/test-checkout\.html/);
+  await expect(page.locator('#amount')).toHaveText('5,000원');
+  await page.getByRole('button', { name: '결제하기' }).click();
+  await expect(page).toHaveURL(/donate-result\.html\?.*paymentKey=/);
+  await expect(page.locator('#headline')).toHaveText('5,000원 후원 완료');
+  expect((await summary()).total).toBe(before + 5000);
+
+  // 결과 페이지 새로고침 = 같은 승인 요청 반복 → 같은 결과, 적립은 그대로
+  await page.reload();
+  await expect(page.locator('#headline')).toHaveText('5,000원 후원 완료');
+  expect((await summary()).total).toBe(before + 5000);
+
+  // 방송 화면에 합계·메시지
+  await page.getByRole('link', { name: '방송으로 돌아가기' }).click();
+  await expect(page.locator('#donation-list')).toContainText(message);
+  await expect(page.locator('#donation-total')).toHaveText(`${(before + 5000).toLocaleString('ko-KR')}원`);
+
+  // 카드 거절 → 실패, 적립 안 됨
+  await page.getByRole('button', { name: '1,000원' }).click();
+  await page.getByRole('button', { name: '후원하기' }).click();
+  await page.locator('input[name=card]').fill('4000 0000 0000 0002');
+  await page.getByRole('button', { name: '결제하기' }).click();
+  await expect(page.locator('#headline')).toHaveText('후원 실패');
+  await expect(page.locator('#detail')).toContainText('승인되지 않았습니다');
+
+  // 결제창 주소의 금액을 1,000,000 → 1,000으로 조작해 결제 → 서버가 주문 금액과 대조해 거부
+  await page.goto(`${BASE}/broadcast.html?id=1`);
+  await page.locator('#donation-form input[name=amount]').fill('1000000');
+  await page.getByRole('button', { name: '후원하기' }).click();
+  await expect(page).toHaveURL(/test-checkout\.html/);
+  const tampered = new URL(page.url()); tampered.searchParams.set('amount', '1000');
+  await page.goto(tampered.href);
+  await page.getByRole('button', { name: '결제하기' }).click();
+  await expect(page.locator('#headline')).toHaveText('후원 실패');
+  await expect(page.locator('#detail')).toContainText('주문 금액과 다름');
+  expect((await summary()).total).toBe(before + 5000);
+
+  // 방송 소유자(demo1)에게는 후원 버튼 없음
+  await page.getByRole('button', { name: '로그아웃' }).click();
+  await login(page, 'demo1', 'demo1234');
+  await page.goto(`${BASE}/broadcast.html?id=1`);
+  await expect(page.locator('#donation-total')).toBeVisible();
+  await expect(page.locator('#donation-form')).toBeHidden();
+});
