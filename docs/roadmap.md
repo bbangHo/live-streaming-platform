@@ -23,7 +23,7 @@
 - PR #6 가정(되돌릴 수 있음): 송출 페이지 PC/모바일 분리(사용자 결정 C안), `POST /start` 제거(송출=시작), 유예 30초(사용자 결정), 개발용 우회(`STREAM_DEV_BYPASS`, 사용자 결정 유지), 토스 키 없으면 내장 테스트 PG.
 - 토스페이먼츠 **테스트 키** 발급·입력(외부계정) — 넣으면 실제 토스 결제창으로 확인 가능. 없어도 내장 테스트 PG로 동작.
 - PR #6 `docker compose up -d --build`로 백엔드 이미지 빌드 확인(클라우드에선 컨테이너 안 Maven 차단으로 미검증).
-- 관례 미준수(기존부터, PR #6 범위 밖): 에러 형식이 `{error:{code,message}}`가 아니라 RFC 9457 ProblemDetail, 토큰이 localStorage. 바꾸려면 API 계약 변경 task로 따로.
+- ~~관례 미준수(에러 형식 ProblemDetail, 토큰 localStorage)~~ → 사용자 결정(11-15): 지금 안 고치고 README "알려진 한계"에 기록.
 - 프론트 프레임워크 확정(현재 정적 HTML; React 도입 여부).
 - 브랜드색 마젠타 핑크 `#FF3D8B` 확정 여부(FigCraft 디자인 쪽).
 - 공인 배포 타깃(minipc vs 클라우드).
