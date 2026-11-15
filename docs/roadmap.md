@@ -12,11 +12,11 @@
 | D6 | PC 송출 ↔ 방송 상태(LIVE/ENDED) 연동 | D5 | Opus high | 🔶 PR #6 열림(머지 대기: 실브라우저 화면공유 수동확인 후 사용자 머지). PR #5는 #6으로 대체해 닫음 |
 | D8 | 모바일 카메라 송출 | D6 | Opus medium | 🔶 PR #6 (실기기 미확인) |
 | D-state | 방송 상태관리 마무리(종료 시 송출 중단·동기화) | D6 | Opus high | 🔶 PR #6 (2초 동기화·30초 유예·kick) |
-| D-readme | README 제출 필수항목(주소·테스트계정·실행·기능확인) | 필수기능 | medium | ⬜ |
+| D-readme | README 제출 필수항목(주소·테스트계정·실행·기능확인) | 필수기능 | medium | 🔶 계정·실행·기능확인·알려진 한계 작성(PR #6). **서비스 주소만 남음**(D-deploy 후) |
 | O-댓글 | (선택) 댓글 REST CRUD + 작성자 권한 | D5 | medium | 🔶 PR #6 |
 | O-녹화 | (선택) 녹화·다시보기(MediaMTX record→저장) | D5 | medium | 🔶 PR #6 |
 | O-도네 | (선택) 도네이션(토스 테스트결제·멱등·원장) | D5 | Opus high | 🔶 PR #6 (토스 키 없이 내장 테스트 PG로 검증) |
-| D-deploy | 공인 URL 배포(HTTPS) — 제출 임박 | 필수기능 | — | ⬜ |
+| D-deploy | 공인 URL 배포(HTTPS) — 제출 임박 | 필수기능 | — | 🔶 런북 [deploy.md](deploy.md) 작성(PR #6). 서버·duckdns는 사용자 |
 
 ## 확인 대기 (사용자 결정 필요)
 - **PR #6 머지** — 사용자가 #6 채택 결정(11-15), #5 닫음. 머지 전 실브라우저 화면공유·「오디오 공유」 송출 → 상세 시청 수동확인.
@@ -26,7 +26,7 @@
 - ~~관례 미준수(에러 형식 ProblemDetail, 토큰 localStorage)~~ → 사용자 결정(11-15): 지금 안 고치고 README "알려진 한계"에 기록.
 - 프론트 프레임워크 확정(현재 정적 HTML; React 도입 여부).
 - 브랜드색 마젠타 핑크 `#FF3D8B` 확정 여부(FigCraft 디자인 쪽).
-- 공인 배포 타깃(minipc vs 클라우드).
+- 공인 배포 타깃(minipc vs 클라우드) + duckdns 서브도메인·토큰 — 런북은 준비됨([deploy.md](deploy.md)), 서버만 정해지면 바로.
 
 ## 메모
 - 클라우드 세션 '작업 이어가기'(치지직 클라우드)에서 모바일로 이어감. 네트워크 egress allowlist 필요(github/docker/gradle/npm).

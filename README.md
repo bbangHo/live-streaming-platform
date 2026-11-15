@@ -62,6 +62,9 @@ docker compose up -d
 | `STREAM_DEV_BYPASS` | `true` | 등록 안 된 스트림 키(개발용 페이지)로도 로그인 없이 송출 허용. **배포 시 `false`** |
 | `TOSS_CLIENT_KEY` / `TOSS_SECRET_KEY` | (비어 있음) | 도네이션용 [토스페이먼츠](https://developers.tosspayments.com) **테스트** 키. 비우면 내장 테스트 결제창 |
 
+### 공인 서버에 배포 (HTTPS)
+duckdns 도메인 + Let's Encrypt 자동 인증서로 올리는 절차(방화벽 포트, `.env`에서 바꿀 값, 확인 순서) → [docs/deploy.md](./docs/deploy.md)
+
 ### Docker 없이 실행
 MediaMTX 바이너리를 받아 직접 띄웁니다 → [media/README.md](./media/README.md)
 ```bash
