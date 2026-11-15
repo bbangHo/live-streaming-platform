@@ -38,7 +38,7 @@ async function load() {
     el('a', { href: `broadcast.html?id=${b.id}` },
       statusBadge(b.status),
       el('h3', {}, b.title),
-      el('div', { className: 'muted' }, `${b.ownerUsername ?? '알 수 없음'} · ${new Date(b.createdAt).toLocaleString()}`)))));
+      el('div', { className: 'muted' }, `${b.ownerUsername ?? '알 수 없음'} · ${kstDateTime(b.createdAt)}`)))));
 }
 
 document.querySelectorAll('.tabs button').forEach((btn) => btn.onclick = () => {

@@ -137,7 +137,7 @@ async function loadRecordings() {
     $('recordings').hidden = list.length === 0;
     $('recording-list').replaceChildren(...list.map((r, i) => el('li', {},
       el('a', { href: `recording.html?id=${r.id}` }, `▶ 녹화 ${i + 1}`),
-      el('span', { className: 'muted' }, ` ${new Date(r.startedAt).toLocaleString()} · ${formatDuration(r.durationMs)}`))));
+      el('span', { className: 'muted' }, ` ${kstDateTime(r.startedAt)} · ${formatDuration(r.durationMs)}`))));
   } catch { /* 방송이 없으면 위의 오류 표시로 충분 */ }
 }
 
@@ -171,7 +171,7 @@ function renderComments() {
   const editingValue = open && Number(open.dataset.id) === editingId ? open.elements[0].value : undefined;
   $('comment-list').replaceChildren(...comments.map((c) => {
     const mine = me && me.id === c.authorId;
-    const meta = el('span', { className: 'muted' }, ` ${new Date(c.createdAt).toLocaleTimeString()}${c.updatedAt ? ' (수정됨)' : ''}`);
+    const meta = el('span', { className: 'muted' }, ` ${kstTime(c.createdAt)}${c.updatedAt ? ' (수정됨)' : ''}`);
     if (mine && editingId === c.id) {
       const input = el('input', { value: editingValue ?? c.content, maxLength: 500, required: true });
       const form = el('form', { className: 'row nowrap editing' }, input,

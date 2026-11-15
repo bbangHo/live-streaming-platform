@@ -35,7 +35,7 @@ async function load(me) {
     $('title').textContent = r.broadcastTitle ?? '(삭제된 방송)';
     $('meta').textContent = `방송자 ${r.ownerUsername ?? '알 수 없음'} · `;
     $('broadcast-link').href = `broadcast.html?id=${r.broadcastId}`;
-    $('started').textContent = new Date(r.startedAt).toLocaleString();
+    $('started').textContent = kstDateTime(r.startedAt);
     $('duration').textContent = formatDuration(r.durationMs);
     $('file').textContent = r.filePath;
     $('manage').hidden = !(me && me.id === r.ownerId);

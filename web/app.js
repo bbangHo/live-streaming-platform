@@ -64,6 +64,11 @@ function el(tag, props = {}, ...children) {
   return node;
 }
 
+// 시간: 서버는 UTC(ISO)로 주고, 화면은 항상 KST로 보여 준다 (보는 사람의 PC 시간대와 무관)
+const KST = { timeZone: 'Asia/Seoul' };
+const kstDateTime = (iso) => new Date(iso).toLocaleString('ko-KR', KST);
+const kstTime = (iso) => new Date(iso).toLocaleTimeString('ko-KR', KST);
+
 /** 1234567(ms) → "20:34", 3600000 이상이면 "1:00:00" */
 function formatDuration(ms) {
   const t = Math.round(ms / 1000), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), sec = String(t % 60).padStart(2, '0');

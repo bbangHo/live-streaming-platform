@@ -168,6 +168,7 @@ test('후원: 테스트 결제 → 서버 승인 → 합계, 새로고침해도 
 
   // 방송 소유자(demo1)에게는 후원 버튼 없음
   await page.getByRole('button', { name: '로그아웃' }).click();
+  await expect(page).toHaveURL(/index\.html$/); // 로그아웃 후 이동이 끝나야 다음 이동과 겹치지 않는다
   await login(page, 'demo1', 'demo1234');
   await page.goto(`${BASE}/broadcast.html?id=1`);
   await expect(page.locator('#donation-total')).toBeVisible();
