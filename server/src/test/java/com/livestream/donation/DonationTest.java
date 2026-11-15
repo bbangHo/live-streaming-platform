@@ -144,6 +144,22 @@ class DonationTest extends ApiTestSupport {
     }
 
     @Test
+    void 승인된_후원이_있는_방송은_삭제_불가_후원_기록_보존() throws Exception {
+        String o = orderOk(donor, 1000);
+        confirm(donor, o, pay(o, 1000, "4242424242424242"), 1000).andExpect(status().isOk());
+        mvc.perform(delete("/api/broadcasts/" + broadcastId).header(HttpHeaders.AUTHORIZATION, bearer(broadcaster)))
+                .andExpect(status().isConflict());
+        summary().andExpect(jsonPath("$.total").value(1000));
+    }
+
+    @Test
+    void 승인_전_주문만_있으면_방송_삭제_가능() throws Exception {
+        orderOk(donor, 1000);
+        mvc.perform(delete("/api/broadcasts/" + broadcastId).header(HttpHeaders.AUTHORIZATION, bearer(broadcaster)))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
     void 주문_검증_로그인_금액범위_본인방송() throws Exception {
         order(null, 1000).andExpect(status().isUnauthorized());
         order(donor, 999).andExpect(status().isBadRequest());

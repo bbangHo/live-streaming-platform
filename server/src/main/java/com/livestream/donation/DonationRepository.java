@@ -18,6 +18,8 @@ public interface DonationRepository extends JpaRepository<Donation, Long> {
 
     boolean existsByPaymentKey(String paymentKey);
 
+    boolean existsByBroadcastIdAndStatus(Long broadcastId, Donation.Status status);
+
     /** 합계는 매번 승인된 행에서 계산한다 — 카운터를 따로 올리지 않으니 이중 적립이 생길 수 없다. */
     @Query("select coalesce(sum(d.amount), 0) from Donation d where d.broadcastId = :broadcastId and d.status = :status")
     long sumAmount(@Param("broadcastId") Long broadcastId, @Param("status") Donation.Status status);

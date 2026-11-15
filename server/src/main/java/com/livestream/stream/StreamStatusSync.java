@@ -31,7 +31,7 @@ public class StreamStatusSync {
     private final Clock clock;
     private final TransactionTemplate tx;
 
-    /** 방송 id → 송출이 처음 끊긴 것을 본 시각. 백엔드가 재시작하면 비지만, 그때는 유예가 한 번 더 주어질 뿐이다. */
+    /** 방송 id → 송출이 처음 끊긴 것을 본 시각. shortcut: 메모리에만 둔다 — 백엔드가 재시작하면 비어 유예가 한 번 더 주어진다. 백엔드를 여러 대 띄우면 DB로 옮긴다 */
     private final Map<Long, Instant> offlineSince = new HashMap<>();
 
     public StreamStatusSync(MediaMtxClient mediamtx, BroadcastRepository broadcasts, MediaProperties props,

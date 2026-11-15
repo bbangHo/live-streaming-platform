@@ -14,6 +14,7 @@ public class TestPaymentGateway implements PaymentGateway {
 
     private record Authorization(String orderId, int amount, boolean declined) {}
 
+    // shortcut: 메모리에만 둔다 — 결제창에서 결제한 뒤 승인 전에 백엔드가 재시작하면 그 결제는 "존재하지 않는 결제"로 실패한다(테스트 PG라 허용)
     private final Map<String, Authorization> authorizations = new ConcurrentHashMap<>();
 
     @Override public String provider() { return "test"; }
