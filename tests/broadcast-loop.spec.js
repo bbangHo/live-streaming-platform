@@ -1,5 +1,5 @@
 // @ts-check
-// 진짜 탭 캡처 → publish.html(WHIP) → MediaMTX → HLS → watch.html 를 한 바퀴 돌리고
+// 진짜 탭 캡처 → dev-publish.html(WHIP) → MediaMTX → HLS → dev-watch.html 를 한 바퀴 돌리고
 // 소리 섞임 · 영상 내용 · 지연 · 탭 닫힘 시 자동 종료를 숫자로 판정한다.
 //
 // 진짜인 것: 탭 화면·탭 소리 캡처(getDisplayMedia), WHIP, MediaMTX, HLS, hls.js 재생
@@ -46,7 +46,7 @@ test('진짜 탭 캡처 송출 → HLS 시청 루프', async ({ context, request
       o.frequency.value = hz; o.connect(d); o.start(); return d.stream;
     };
   }, MIC_HZ);
-  await pub.goto(`${BASE}/publish.html`);
+  await pub.goto(`${BASE}/dev-publish.html`);
   await pub.fill('#key', KEY);
   await pub.click('#start');
   await expect(pub.locator('#state')).toHaveText('connected', { timeout: 20_000 });
@@ -55,7 +55,7 @@ test('진짜 탭 캡처 송출 → HLS 시청 루프', async ({ context, request
   await expect.poll(() => hlsStatus(request), { timeout: 15_000 }).toBe(200);
 
   const watch = await context.newPage();
-  await watch.goto(`${BASE}/watch.html`);
+  await watch.goto(`${BASE}/dev-watch.html`);
   await watch.fill('#key', KEY);
   await watch.click('#play');
   await expect.poll(() => watch.evaluate(() => document.getElementById('video').currentTime), { timeout: 30_000 }).toBeGreaterThan(2);

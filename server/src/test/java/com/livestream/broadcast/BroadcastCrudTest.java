@@ -62,7 +62,7 @@ class BroadcastCrudTest extends ApiTestSupport {
     void 목록은_상태로_거를_수_있다() throws Exception {
         long ready = create("{\"title\":\"ready\"}");
         long live = create("{\"title\":\"live\"}");
-        act(live, "start").andExpect(status().isOk());
+        goLive(live);
 
         mvc.perform(get("/api/broadcasts?status=LIVE"))
                 .andExpect(jsonPath("$[*].id", hasItem((int) live)))
@@ -75,11 +75,15 @@ class BroadcastCrudTest extends ApiTestSupport {
     void 상태는_대기_방송중_종료_순서로만_바뀐다() throws Exception {
         long id = create("{\"title\":\"flow\"}");
         act(id, "stop").andExpect(status().isConflict());          // 대기 → 종료 불가
-        act(id, "start").andExpect(jsonPath("$.status").value("LIVE"));
-        act(id, "start").andExpect(status().isConflict());         // 이미 방송 중
-        act(id, "stop").andExpect(jsonPath("$.status").value("ENDED"));
-        act(id, "start").andExpect(status().isConflict());         // 종료된 방송 재시작 불가
+        act(id, "start").andExpect(status().isNotFound());         // 시작 API는 없다 — 송출이 들어오면 자동으로 방송 중
+        goLive(id);
+        mvc.perform(get("/api/broadcasts/" + id))
+                .andExpect(jsonPath("$.status").value("LIVE"))
+                .andExpect(jsonPath("$.startedAt").isString());
+        act(id, "stop").andExpect(jsonPath("$.status").value("ENDED")).andExpect(jsonPath("$.endedAt").isString());
         act(id, "stop").andExpect(status().isConflict());
+        goLive(id);                                                // 종료된 방송에 송출이 남아 있어도 다시 방송 중이 되지 않는다
+        mvc.perform(get("/api/broadcasts/" + id)).andExpect(jsonPath("$.status").value("ENDED"));
     }
 
     @Test

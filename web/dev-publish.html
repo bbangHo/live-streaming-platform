@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>송출 (D1 스파이크)</title>
+<title>개발용 송출</title>
 <style>
   body { font-family: system-ui, sans-serif; max-width: 860px; margin: 24px auto; padding: 0 16px; }
   video { width: 100%; background: #000; aspect-ratio: 16/9; }
@@ -12,7 +12,8 @@
 </style>
 </head>
 <body>
-<h1>브라우저 송출 (WHIP)</h1>
+<h1>개발용 송출 (WHIP)</h1>
+<p>스트림 키를 직접 넣는 개발·테스트용 페이지. 등록되지 않은 키만 로그인 없이 송출됩니다(<code>STREAM_DEV_BYPASS=true</code>일 때). 실제 방송은 방송 상세 → PC/모바일 송출에서 합니다.</p>
 <p>
   <label>MediaMTX <input id="server" size="24"></label>
   <label>스트림 키 <input id="key" value="test" size="10"></label>
@@ -32,7 +33,7 @@ const qk = new URLSearchParams(location.search).get('key'); // 방송 상세 →
 if (qk) $('key').value = qk;
 $('server').value = location.protocol === 'https:' ? location.origin : `http://${location.hostname || 'localhost'}:8889`;
 const log = (m) => { $('log').textContent += new Date().toLocaleTimeString() + ' ' + m + '\n'; };
-if (location.protocol === 'file:') log('⚠ file://로 열면 송출이 안 됩니다(CORS). docker compose up -d 후 http://localhost:8000/publish.html 로 여세요.');
+if (location.protocol === 'file:') log('⚠ file://로 열면 송출이 안 됩니다(CORS). docker compose up -d 후 http://localhost:8000/dev-publish.html 로 여세요.');
 let pc, sessionUrl, streams = [], audioCtx;
 
 // 화면(+탭/시스템 소리)과 마이크를 Web Audio로 한 트랙에 섞는다

@@ -38,6 +38,7 @@ async function api(path, { method = 'GET', body } = {}, retried = false) {
     const problem = await res.json().catch(() => ({}));
     const err = new Error(problem.detail || `요청 실패 (${res.status})`);
     err.status = res.status;
+    err.body = problem;
     throw err;
   }
   return res.status === 204 ? null : res.json();
@@ -63,6 +64,17 @@ function el(tag, props = {}, ...children) {
   return node;
 }
 
+// 시간: 서버는 UTC(ISO)로 주고, 화면은 항상 KST로 보여 준다 (보는 사람의 PC 시간대와 무관)
+const KST = { timeZone: 'Asia/Seoul' };
+const kstDateTime = (iso) => new Date(iso).toLocaleString('ko-KR', KST);
+const kstTime = (iso) => new Date(iso).toLocaleTimeString('ko-KR', KST);
+
+/** 1234567(ms) → "20:34", 3600000 이상이면 "1:00:00" */
+function formatDuration(ms) {
+  const t = Math.round(ms / 1000), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), sec = String(t % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
+}
+
 const STATUS_LABEL = { READY: '대기', LIVE: '방송 중', ENDED: '종료' };
 const statusBadge = (s) => el('span', { className: `badge ${s.toLowerCase()}` }, STATUS_LABEL[s] ?? s);
 
@@ -73,6 +85,8 @@ async function renderNav() {
   const next = encodeURIComponent(location.pathname.replace(/^\//, '') + location.search);
   nav.replaceChildren(...el('div', {},
     el('a', { href: 'index.html', className: 'logo' }, '● LIVE'),
+    el('a', { href: 'index.html' }, '방송'),
+    el('a', { href: 'recordings.html' }, '다시보기'),
     el('span', { className: 'spacer' }),
     me ? el('span', { className: 'me' }, me.username) : null,
     me ? el('button', { onclick: logout, className: 'link' }, '로그아웃')

@@ -33,6 +33,10 @@ public class Broadcast {
 
     private Instant createdAt = Instant.now();
 
+    private Instant startedAt;
+
+    private Instant endedAt;
+
     protected Broadcast() {}
 
     public Broadcast(Long ownerId, String title, String description) {
@@ -53,18 +57,27 @@ public class Broadcast {
         this.description = description;
     }
 
-    public void start() {
+    /** 송출이 MediaMTX에 실제로 들어왔을 때(StreamStatusSync). 대기 → 방송 중. */
+    public void goLive(Instant now) {
         if (status != Status.READY) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "대기 중인 방송만 시작할 수 있음 (현재 " + status + ")");
         }
         status = Status.LIVE;
+        startedAt = now;
     }
 
-    public void stop() {
+    /** 소유자 종료 또는 송출 끊김 유예 초과. 방송 중 → 종료. 종료는 끝 — 다시 방송하려면 새로 만든다. */
+    public void end(Instant now) {
         if (status != Status.LIVE) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "방송 중일 때만 종료할 수 있음 (현재 " + status + ")");
         }
         status = Status.ENDED;
+        endedAt = now;
+    }
+
+    /** 송출(WHIP publish)을 받아도 되는 상태: 대기, 또는 방송 중(끊긴 뒤 유예 시간 안에 다시 붙는 경우). */
+    public boolean acceptsPublish() {
+        return status == Status.READY || status == Status.LIVE;
     }
 
     public Long getId() { return id; }
@@ -74,4 +87,6 @@ public class Broadcast {
     public String getStreamKey() { return streamKey; }
     public Status getStatus() { return status; }
     public Instant getCreatedAt() { return createdAt; }
+    public Instant getStartedAt() { return startedAt; }
+    public Instant getEndedAt() { return endedAt; }
 }

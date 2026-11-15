@@ -30,3 +30,29 @@ form { display: grid; gap: 8px; }
 video { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 8px; }
 .placeholder { width: 100%; aspect-ratio: 16/9; display: grid; place-items: center; background: #222; color: #ccc; border-radius: 8px; }
 code { overflow-wrap: anywhere; }
+select { font: inherit; padding: 6px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+.spacer { flex: 1; }
+.log { white-space: pre-wrap; font: 12px monospace; max-height: 12em; overflow: auto; margin-top: 8px; }
+video.camera { aspect-ratio: auto; max-height: 70vh; object-fit: contain; }
+details summary { cursor: pointer; }
+a.button { display: inline-block; padding: 6px 12px; border: 1px solid var(--line); border-radius: 6px; background: #fff; text-decoration: none; }
+a.button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+[hidden] { display: none !important; }
+.comments { list-style: none; padding: 0; margin: 0 0 8px; max-height: 360px; overflow: auto; }
+.comments li { padding: 6px 0; border-bottom: 1px solid var(--line); }
+.comments .content { white-space: pre-wrap; overflow-wrap: anywhere; }
+.comments .actions { margin-left: 8px; display: inline-flex; gap: 8px; font-size: .85em; }
+.row.nowrap { flex-wrap: nowrap; }
+.row.nowrap input { flex: 1; }
+#comments { margin: 16px 0; }
+h1 .badge { font-size: .5em; vertical-align: middle; }
+.plain { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+#recordings { margin: 16px 0; }
+dl.info { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 16px 0; }
+dl.info dt { color: var(--muted); }
+dl.info dd { margin: 0; overflow-wrap: anywhere; }
+nav a { text-decoration: none; }
+.accent { color: var(--accent); }
+.big { font-size: 1.6em; font-weight: 700; margin: 4px 0 12px; }
+#donations { margin: 16px 0; }
+#donation-list { max-height: 200px; overflow: auto; margin-bottom: 8px; }

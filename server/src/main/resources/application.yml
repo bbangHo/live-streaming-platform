@@ -17,3 +17,16 @@ app:
     secret: ${JWT_SECRET:}
     access-ttl: ${JWT_ACCESS_TTL:15m}
     refresh-ttl: ${JWT_REFRESH_TTL:14d}
+  media:
+    api-url: ${MEDIAMTX_API_URL:http://localhost:9997}
+    # MediaMTX authHTTPAddress의 ?secret= 값과 같아야 한다. 비면 송출 인증을 전부 거부
+    hook-secret: ${MEDIA_HOOK_SECRET:}
+    # DB에 없는 스트림 키로도 송출 허용(개발용 dev-publish.html). 배포 시 false
+    dev-bypass: ${STREAM_DEV_BYPASS:false}
+    grace: ${STREAM_GRACE:30s}
+    sync-enabled: ${STREAM_SYNC_ENABLED:true}
+  payment:
+    # 토스페이먼츠 테스트 키 (개발자센터 → API 키). 둘 다 있으면 토스 결제창, 없으면 내장 테스트 PG
+    toss-client-key: ${TOSS_CLIENT_KEY:}
+    toss-secret-key: ${TOSS_SECRET_KEY:}
+    toss-api-url: ${TOSS_API_URL:https://api.tosspayments.com}

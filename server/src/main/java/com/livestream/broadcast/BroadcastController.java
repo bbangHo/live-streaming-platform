@@ -30,10 +30,12 @@ public class BroadcastController {
 
     /** hlsPath: 같은 출처 기준 시청 주소(nginx·Caddy가 /live/ 를 MediaMTX로 넘긴다). */
     public record BroadcastResponse(Long id, Long ownerId, String ownerUsername, String title, String description,
-                                    Broadcast.Status status, String streamKey, String hlsPath, Instant createdAt) {
+                                    Broadcast.Status status, String streamKey, String hlsPath, Instant createdAt,
+                                    Instant startedAt, Instant endedAt) {
         static BroadcastResponse of(Broadcast b, String ownerUsername) {
             return new BroadcastResponse(b.getId(), b.getOwnerId(), ownerUsername, b.getTitle(), b.getDescription(),
-                    b.getStatus(), b.getStreamKey(), "/live/" + b.getStreamKey() + "/index.m3u8", b.getCreatedAt());
+                    b.getStatus(), b.getStreamKey(), "/live/" + b.getStreamKey() + "/index.m3u8", b.getCreatedAt(),
+                    b.getStartedAt(), b.getEndedAt());
         }
     }
 
@@ -66,11 +68,6 @@ public class BroadcastController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@AuthenticationPrincipal Long userId, @PathVariable Long id) {
         service.delete(userId, id);
-    }
-
-    @PostMapping("/{id}/start")
-    public BroadcastResponse start(@AuthenticationPrincipal Long userId, @PathVariable Long id) {
-        return toResponse(service.start(userId, id));
     }
 
     @PostMapping("/{id}/stop")
