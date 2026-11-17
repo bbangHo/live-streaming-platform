@@ -22,9 +22,10 @@ services:
       MTX_PATHDEFAULTS_RUNONRECORDSEGMENTCOMPLETE: sh /record-hook.sh
       RECORD_HOOK_URL: http://backend:8080/api/internal/media/recordings?secret=${MEDIA_HOOK_SECRET:-local-media-hook-secret}
     ports:
-      - "8888:8888"        # HLS 시청
-      - "8889:8889"        # WHIP 송출 / WHEP
-      - "8189:8189/udp"    # WebRTC 미디어
+      # 8888/8889는 루프백만 바인딩 — 외부는 Caddy(443)로만. 공인 IP 직결 서버에서 raw 포트 인터넷 노출 방지
+      - "127.0.0.1:8888:8888"   # HLS 시청 (Caddy가 프록시)
+      - "127.0.0.1:8889:8889"   # WHIP 송출 / WHEP (Caddy가 프록시)
+      - "8189:8189/udp"         # WebRTC 미디어 — ICE 직통이라 공개 유지
       - "8189:8189/tcp"
 
   # 백엔드 API (Spring Boot): 인증/인가 + 방송 정보. http://localhost:8080/api/...
@@ -48,7 +49,7 @@ services:
       TOSS_CLIENT_KEY: ${TOSS_CLIENT_KEY:-}
       TOSS_SECRET_KEY: ${TOSS_SECRET_KEY:-}
     ports:
-      - "${API_PORT:-8080}:8080"
+      - "127.0.0.1:${API_PORT:-8080}:8080"   # 외부는 Caddy(443) /api 로만
 
   # DB: 방송·계정 영구 저장. 데이터는 pgdata 볼륨에 남아 컨테이너를 지우거나 재시작해도 유지된다(down -v 만 삭제)
   postgres:
@@ -74,7 +75,7 @@ services:
       - ./web:/usr/share/nginx/html:ro
       - ./media/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
-      - "${WEB_PORT:-8000}:80"
+      - "127.0.0.1:${WEB_PORT:-8000}:80"   # 외부는 Caddy(443)로만
 
   # 선택: HTTPS (모바일 기기에서 송출하거나 공인 도메인에 올릴 때). 페이지·WHIP·HLS를 한 출처로 묶는다
   caddy:
