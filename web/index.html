@@ -10,19 +10,22 @@
 <body>
 <nav id="nav"></nav>
 <main class="wide">
-  <section id="create" class="card" hidden>
+  <div class="list-head">
+    <div class="tabs">
+      <button data-status="" aria-pressed="true">전체</button>
+      <button data-status="LIVE" aria-pressed="false">방송 중</button>
+    </div>
+    <span id="create" hidden><button type="button" class="primary" onclick="document.getElementById('create-dialog').showModal()">＋ 방송 만들기</button></span>
+  </div>
+  <dialog id="create-dialog">
     <h2>방송 만들기</h2>
     <form id="create-form">
-      <input name="title" placeholder="방송 제목" maxlength="100" required>
-      <textarea name="description" placeholder="설명 (선택)" maxlength="1000" rows="2"></textarea>
-      <div class="row"><button class="primary">만들기</button><span class="error" id="create-error"></span></div>
+      <input name="title" placeholder="방송 제목" maxlength="100" required autofocus>
+      <textarea name="description" placeholder="설명 (선택)" maxlength="1000" rows="3"></textarea>
+      <span class="error" id="create-error"></span>
+      <div class="row"><span class="spacer"></span><button type="button" onclick="this.closest('dialog').close()">취소</button><button class="primary">만들기</button></div>
     </form>
-  </section>
-
-  <div class="tabs">
-    <button data-status="" aria-pressed="true">전체</button>
-    <button data-status="LIVE" aria-pressed="false">방송 중</button>
-  </div>
+  </dialog>
   <ul id="list" class="grid"></ul>
   <p id="empty" class="muted" hidden>방송이 없습니다.</p>
 </main>

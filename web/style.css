@@ -127,3 +127,9 @@ video.camera { aspect-ratio: auto; max-height: 70vh; object-fit: contain; }
 dl.info { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 16px 0; }
 dl.info dt { color: var(--muted); }
 dl.info dd { margin: 0; overflow-wrap: anywhere; }
+
+/* 목록 머리: 왼쪽 탭, 오른쪽 방송 만들기 버튼(로그인 시) → 모달 */
+.list-head { display: flex; align-items: center; gap: 12px; margin: 4px 0 20px; border-bottom: 1px solid var(--line); }
+.list-head .tabs { margin: 0; border: 0; flex: 1; }
+dialog { width: min(480px, calc(100% - 32px)); padding: 20px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--fg); }
+dialog::backdrop { background: rgba(0, 0, 0, .65); }
