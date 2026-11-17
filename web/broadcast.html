@@ -10,13 +10,30 @@
 </head>
 <body>
 <nav id="nav"></nav>
-<main>
+<main class="wide">
+<div class="watch">
+  <div class="watch-main">
   <div id="player"></div>
   <h1 id="title"></h1>
   <p class="row"><span id="status"></span><span id="owner" class="muted"></span></p>
   <p id="description" style="white-space: pre-wrap"></p>
   <p class="error" id="error"></p>
+  </div>
 
+  <section id="comments" class="card">
+    <h2>댓글 <span id="comment-count" class="muted"></span></h2>
+    <ul id="comment-list" class="comments"></ul>
+    <form id="comment-form" hidden>
+      <div class="row nowrap">
+        <input name="content" maxlength="500" placeholder="댓글 쓰기 (500자까지)" required autocomplete="off">
+        <button class="primary">등록</button>
+      </div>
+    </form>
+    <p id="comment-login" class="muted" hidden><a id="comment-login-link">로그인</a>하면 댓글을 쓸 수 있습니다.</p>
+    <p class="error" id="comment-error"></p>
+  </section>
+
+  <div class="watch-extra">
   <section id="donations" class="card">
     <h2>후원 <span id="donation-total" class="accent"></span> <span id="donation-count" class="muted"></span></h2>
     <ul id="donation-list" class="plain"></ul>
@@ -42,19 +59,6 @@
     <ul id="recording-list" class="plain"></ul>
   </section>
 
-  <section id="comments" class="card">
-    <h2>댓글 <span id="comment-count" class="muted"></span></h2>
-    <ul id="comment-list" class="comments"></ul>
-    <form id="comment-form" hidden>
-      <div class="row nowrap">
-        <input name="content" maxlength="500" placeholder="댓글 쓰기 (500자까지)" required autocomplete="off">
-        <button class="primary">등록</button>
-      </div>
-    </form>
-    <p id="comment-login" class="muted" hidden><a id="comment-login-link">로그인</a>하면 댓글을 쓸 수 있습니다.</p>
-    <p class="error" id="comment-error"></p>
-  </section>
-
   <!-- 소유자에게만 보인다. 버튼을 숨기는 건 편의일 뿐, 권한은 서버가 매 요청마다 다시 확인한다(타인 403) -->
   <section id="manage" class="card" hidden>
     <h2>방송 관리</h2>
@@ -72,6 +76,8 @@
       <div><button>수정 저장</button></div>
     </form>
   </section>
+  </div>
+</div>
 </main>
 
 <script>
