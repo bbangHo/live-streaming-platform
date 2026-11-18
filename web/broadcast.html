@@ -15,7 +15,7 @@
   <div class="watch-main">
   <div id="player"></div>
   <h1 id="title"></h1>
-  <p class="row"><span id="status"></span><span id="owner" class="muted"></span></p>
+  <div class="row watch-meta"><span id="owner" class="owner"></span><button id="follow" class="primary" hidden></button><span class="spacer"></span><span id="status"></span><span id="viewers" class="muted"></span><span id="category"></span></div>
   <p id="description" style="white-space: pre-wrap"></p>
   <p class="error" id="error"></p>
   </div>
@@ -72,6 +72,7 @@
     <p class="muted">스트림 키 <code id="stream-key"></code> (시청 주소에 쓰이는 공개 값 — 송출은 소유자 로그인이 있어야만 됩니다)</p>
     <form id="edit" style="margin-top: 12px">
       <input name="title" maxlength="100" required>
+      <select name="category" id="edit-category"></select>
       <textarea name="description" maxlength="1000" rows="3" placeholder="설명 (선택)"></textarea>
       <div><button>수정 저장</button></div>
     </form>
@@ -86,6 +87,24 @@ const id = new URLSearchParams(location.search).get('id');
 let me = null, current = null, hls = null;
 
 function showError(err) { $('error').textContent = err.message; }
+for (const [k, v] of Object.entries(CATEGORY_LABEL)) $('edit-category').append(el('option', { value: k }, v));
+
+// ── 채널 팔로우: 서버가 채널 API를 모르면 버튼을 숨긴다 ──
+let channel = null;
+async function loadChannel(ownerId) {
+  channel = await api(`/api/channels/${ownerId}`).catch(() => null);
+  $('follow').hidden = !channel || !me || me.id === ownerId;
+  if (!channel) return;
+  $('follow').textContent = channel.following ? '팔로잉' : '♥ 팔로우';
+  $('follow').classList.toggle('primary', !channel.following);
+}
+$('follow').onclick = async () => {
+  try {
+    await api(`/api/channels/${channel.id}/follow`, { method: channel.following ? 'DELETE' : 'PUT' });
+    await loadChannel(channel.id);
+    renderSide(me);
+  } catch (err) { showError(err); }
+};
 
 /** 방송 중이면 HLS 재생, 아니면 안내 문구. 상태가 바뀔 때만 다시 그린다. */
 function renderPlayer(b) {
@@ -118,7 +137,10 @@ function render(b) {
   document.title = b.title;
   $('title').textContent = b.title;
   $('status').replaceChildren(statusBadge(b.status));
-  $('owner').textContent = `방송자 ${b.ownerUsername ?? '알 수 없음'}`;
+  $('owner').replaceChildren(el('a', { href: `channel.html?id=${b.ownerId}` }, avatar(b.ownerUsername), el('b', {}, b.ownerUsername ?? '알 수 없음')));
+  $('viewers').textContent = b.status === 'LIVE' ? (viewers(b) ?? '') : '';
+  $('category').replaceChildren(CATEGORY_LABEL[b.category] ? el('a', { className: 'tag', href: 'index.html' }, CATEGORY_LABEL[b.category]) : '');
+  if (!channel) loadChannel(b.ownerId);
   $('description').textContent = b.description ?? '';
 
   const mine = me && me.id === b.ownerId;
@@ -133,6 +155,7 @@ function render(b) {
   if (document.activeElement?.form !== form) { // 입력 중인 값은 덮어쓰지 않는다
     form.elements.title.value = b.title; // form.title은 폼 자신의 title 속성이라 elements로
     form.elements.description.value = b.description ?? '';
+    form.elements.category.value = b.category ?? 'TALK';
   }
 }
 
@@ -161,7 +184,7 @@ $('stop').onclick = () => confirm('방송을 종료할까요? 송출 중이면 �
 $('edit').onsubmit = (e) => {
   e.preventDefault();
   const f = new FormData(e.target);
-  act(() => api(`/api/broadcasts/${id}`, { method: 'PATCH', body: { title: f.get('title'), description: f.get('description') || null } }))();
+  act(() => api(`/api/broadcasts/${id}`, { method: 'PATCH', body: { title: f.get('title'), description: f.get('description') || null, category: f.get('category') } }))();
 };
 $('delete').onclick = async () => {
   if (!confirm('이 방송을 삭제할까요? 되돌릴 수 없습니다.')) return;
@@ -271,6 +294,7 @@ function loadScript(src) {
 
 renderNav().then((u) => {
   me = u;
+  channel = null; // 로그인 정보를 안 뒤에 팔로우 상태를 다시 받는다
   $('comment-form').hidden = !me;
   $('comment-login').hidden = !!me;
   $('comment-login-link').href = `login.html?next=${encodeURIComponent('broadcast.html?id=' + id)}`;

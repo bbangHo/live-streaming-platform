@@ -22,11 +22,7 @@ async function load() {
   try {
     const list = await api('/api/recordings');
     $('empty').hidden = list.length > 0;
-    $('list').replaceChildren(...list.map((r) => el('li', { className: 'card' },
-      el('a', { href: `recording.html?id=${r.id}` },
-        el('span', { className: 'badge' }, `▶ ${formatDuration(r.durationMs)}`),
-        el('h3', {}, r.broadcastTitle ?? '(삭제된 방송)'),
-        el('div', { className: 'muted' }, `${r.ownerUsername ?? '알 수 없음'} · ${kstDateTime(r.startedAt)}`)))));
+    $('list').replaceChildren(...list.map(vodCard));
   } catch (err) { $('error').textContent = err.message; }
 }
 renderNav();

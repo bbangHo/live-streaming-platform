@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>채널</title>
+<link rel="stylesheet" href="style.css">
+<script src="app.js"></script>
+</head>
+<body>
+<nav id="nav"></nav>
+<main class="wide">
+  <section class="channel-head">
+    <div class="channel-banner"></div>
+    <div class="channel-info">
+      <span id="ch-avatar"></span>
+      <div class="channel-name">
+        <h1 id="ch-name"></h1>
+        <p id="ch-meta" class="muted"></p>
+      </div>
+      <span class="spacer"></span>
+      <a id="ch-live" class="button live-btn" hidden><span class="dot"></span> 방송 중 · 시청하기</a>
+      <button id="follow" class="primary" hidden></button>
+    </div>
+  </section>
+  <p class="error" id="error"></p>
+
+  <div class="tabs" id="ch-tabs">
+    <button data-tab="home" aria-pressed="true">방송</button>
+    <button data-tab="vods" aria-pressed="false">다시보기</button>
+    <button data-tab="community" aria-pressed="false" hidden>커뮤니티</button>
+  </div>
+
+  <section id="tab-home">
+    <ul id="ch-broadcasts" class="grid"></ul>
+    <p id="ch-broadcasts-empty" class="muted" hidden>아직 방송이 없습니다.</p>
+  </section>
+  <section id="tab-vods" hidden>
+    <ul id="ch-vods" class="grid"></ul>
+    <p id="ch-vods-empty" class="muted" hidden>아직 다시보기가 없습니다.</p>
+  </section>
+  <section id="tab-community" class="community" hidden>
+    <form id="post-form" class="card" hidden>
+      <textarea name="content" maxlength="1000" rows="3" placeholder="채널에 글 남기기 (1000자까지)" required></textarea>
+      <div class="row"><span class="error" id="post-error"></span><span class="spacer"></span><button class="primary">등록</button></div>
+    </form>
+    <p id="post-login" class="muted" hidden><a id="post-login-link">로그인</a>하면 글을 쓸 수 있습니다.</p>
+    <ul id="posts" class="posts"></ul>
+    <p id="posts-empty" class="muted" hidden>아직 글이 없습니다. 첫 글을 남겨 보세요.</p>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const id = Number(new URLSearchParams(location.search).get('id'));
+let me = null, channel = null, name = null;
+
+async function loadChannel() {
+  // 채널 API가 없거나(서버 구버전) 실패하면 방송 목록에서 이름만 찾아 쓴다
+  channel = await api(`/api/channels/${id}`).catch(() => null);
+  const all = await api(`/api/broadcasts?ownerId=${id}`).catch(() => []);
+  const mine = all.filter((b) => b.ownerId === id);
+  name = channel?.username ?? mine[0]?.ownerUsername ?? (me?.id === id ? me.username : null);
+  if (!name) { $('error').textContent = '없는 채널입니다.'; return null; }
+  document.title = `${name} 채널`;
+  $('ch-avatar').replaceChildren(avatar(name, 'lg'));
+  $('ch-name').textContent = name;
+  $('ch-meta').textContent = channel ? `팔로워 ${channel.followerCount.toLocaleString('ko-KR')}명 · 방송 ${mine.length}개` : `방송 ${mine.length}개`;
+  const live = channel?.liveBroadcastId ?? mine.find((b) => b.status === 'LIVE')?.id;
+  $('ch-live').hidden = !live;
+  if (live) $('ch-live').href = `broadcast.html?id=${live}`;
+  $('follow').hidden = !channel || !me || me.id === id;
+  $('follow').textContent = channel?.following ? '팔로잉' : '팔로우';
+  $('follow').classList.toggle('primary', !channel?.following);
+  $('ch-broadcasts-empty').hidden = mine.length > 0;
+  const rank = { LIVE: 0, READY: 1, ENDED: 2 };
+  mine.sort((a, b) => (rank[a.status] - rank[b.status]) || (b.createdAt > a.createdAt ? 1 : -1));
+  $('ch-broadcasts').replaceChildren(...mine.map(broadcastCard));
+  return name;
+}
+
+async function loadVods() {
+  const list = (await api(`/api/recordings?ownerId=${id}`).catch(() => []))
+    .filter((r) => (r.ownerId !== undefined ? r.ownerId === id : r.ownerUsername === name));
+  $('ch-vods-empty').hidden = list.length > 0;
+  $('ch-vods').replaceChildren(...list.map(vodCard));
+}
+
+// ── 커뮤니티: 읽기는 누구나, 쓰기는 로그인, 삭제는 작성자·채널 주인 (버튼은 편의 — 서버가 다시 확인해 403) ──
+async function loadPosts() {
+  const posts = await api(`/api/channels/${id}/posts`).catch(() => null);
+  document.querySelector('[data-tab="community"]').hidden = posts === null; // 서버가 커뮤니티를 모르면 탭을 숨긴다
+  if (!posts) return;
+  $('posts-empty').hidden = posts.length > 0;
+  $('posts').replaceChildren(...posts.map((p) => el('li', { className: 'card post' },
+    el('div', { className: 'row' }, avatar(p.authorUsername, 'sm'), el('b', {}, p.authorUsername ?? '알 수 없음'),
+      p.authorId === id ? el('span', { className: 'tag' }, '채널 주인') : null,
+      el('span', { className: 'muted' }, kstDateTime(p.createdAt)), el('span', { className: 'spacer' }),
+      me && (me.id === p.authorId || me.id === id)
+        ? el('button', { className: 'link', onclick: () => confirm('글을 삭제할까요?') && postAct(() => api(`/api/posts/${p.id}`, { method: 'DELETE' })) }, '삭제')
+        : null),
+    el('p', { className: 'content' }, p.content))));
+}
+
+async function postAct(fn) {
+  $('post-error').textContent = '';
+  try { await fn(); } catch (err) { $('post-error').textContent = err.message; }
+  await loadPosts();
+}
+
+$('post-form').onsubmit = (e) => {
+  e.preventDefault();
+  const input = e.target.elements.content;
+  postAct(async () => { await api(`/api/channels/${id}/posts`, { method: 'POST', body: { content: input.value } }); input.value = ''; });
+};
+
+$('follow').onclick = async () => {
+  try {
+    await api(`/api/channels/${id}/follow`, { method: channel.following ? 'DELETE' : 'PUT' });
+    await loadChannel();
+    renderSide(me);
+  } catch (err) { $('error').textContent = err.message; }
+};
+
+document.querySelectorAll('#ch-tabs button').forEach((btn) => btn.onclick = () => {
+  document.querySelectorAll('#ch-tabs button').forEach((b) => {
+    b.setAttribute('aria-pressed', b === btn);
+    $(`tab-${b.dataset.tab}`).hidden = b !== btn;
+  });
+});
+
+renderNav().then(async (u) => {
+  me = u;
+  $('post-form').hidden = !me;
+  $('post-login').hidden = !!me;
+  $('post-login-link').href = `login.html?next=${encodeURIComponent('channel.html?id=' + id)}`;
+  if (await loadChannel()) { loadVods(); loadPosts(); }
+  if (location.hash === '#community') document.querySelector('[data-tab="community"]').click();
+});
+</script>
+</body>
+</html>

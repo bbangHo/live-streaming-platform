@@ -27,11 +27,11 @@ nav .me { color: var(--muted); font-weight: 500; }
 
 /* 버튼·입력 */
 button, input, textarea, select { font: inherit; color: inherit; }
-button, a.button { display: inline-block; padding: 6px 12px; border: 0; border-radius: var(--radius); background: var(--raised);
+button, .button { display: inline-block; padding: 6px 12px; border: 0; border-radius: var(--radius); background: var(--raised);
   color: var(--fg); font-weight: 600; text-decoration: none; cursor: pointer; }
-button:hover, a.button:hover { background: #2f2f35; color: var(--fg); }
-button.primary, a.button.primary { background: var(--accent); color: var(--on-accent); }
-button.primary:hover, a.button.primary:hover { background: var(--accent-hover); color: var(--on-accent); }
+button:hover, .button:hover { background: #2f2f35; color: var(--fg); }
+button.primary, .button.primary { background: var(--accent); color: var(--on-accent); }
+button.primary:hover, .button.primary:hover { background: var(--accent-hover); color: var(--on-accent); }
 button.danger { background: transparent; color: var(--danger); box-shadow: inset 0 0 0 1px var(--danger); }
 button.danger:hover { background: var(--danger); color: #fff; }
 button.link { background: none; padding: 0; color: var(--muted); font-weight: 500; text-decoration: underline; }
@@ -81,9 +81,9 @@ h1 .badge { font-size: .5em; vertical-align: middle; }
 .grid a::before { content: ""; display: block; aspect-ratio: 16 / 9; border-radius: var(--radius);
   background: linear-gradient(135deg, #0f2a33 0%, #1c1c24 55%, #12303a 100%); transition: transform .12s, box-shadow .12s; }
 .grid a:hover::before { transform: translate(4px, -4px); box-shadow: -4px 4px 0 var(--accent); }
-.grid .badge { position: absolute; top: 10px; left: 10px; }
-.grid a:hover .badge { transform: translate(4px, -4px); transition: transform .12s; }
-.grid h3 { margin: 10px 0 2px; font-size: 1em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.grid .thumb-tags { position: absolute; top: 10px; left: 10px; display: flex; gap: 6px; transition: transform .12s; }
+.grid a:hover .thumb-tags { transform: translate(4px, -4px); }
+.grid h3 { margin: 0 0 2px; font-size: 1em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .grid a:hover h3 { color: var(--accent); }
 
 /* 영상 */
@@ -133,3 +133,91 @@ dl.info dd { margin: 0; overflow-wrap: anywhere; }
 .list-head .tabs { margin: 0; border: 0; flex: 1; }
 dialog { width: min(480px, calc(100% - 32px)); padding: 20px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--fg); }
 dialog::backdrop { background: rgba(0, 0, 0, .65); }
+
+/* ── 치지직풍 확장: 상단바 검색·메뉴, 사이드바, 홈 배너, 카테고리, 채널, 커뮤니티 ── */
+nav .nav-link { color: var(--fg); }
+nav > :not(.search, .spacer) { flex: none; }
+nav .search { display: flex; gap: 0; width: min(400px, 40vw); }
+nav .search input { border-radius: var(--radius) 0 0 var(--radius); padding: 6px 12px; background: var(--raised); border-color: var(--raised); }
+nav .search-btn { border-radius: 0 var(--radius) var(--radius) 0; padding: 6px 12px; font-size: 1.05em; }
+nav .menu { position: relative; }
+nav .menu summary { list-style: none; display: flex; align-items: center; gap: 8px; cursor: pointer; }
+nav .menu summary::-webkit-details-marker { display: none; }
+.menu-panel { position: absolute; right: 0; top: calc(100% + 8px); min-width: 180px; display: grid; padding: 6px; z-index: 20;
+  background: var(--raised); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, .5); }
+.menu-panel a, .menu-panel button.link { padding: 8px 10px; border-radius: 4px; color: var(--fg); text-decoration: none; text-align: left; font-weight: 500; }
+.menu-panel a:hover, .menu-panel button.link:hover { background: #2f2f35; color: var(--fg); }
+
+.avatar { flex: none; display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; color: #fff; font-weight: 700; font-size: .9em; }
+.avatar.sm { width: 24px; height: 24px; font-size: .75em; }
+.avatar.lg { width: 84px; height: 84px; font-size: 2em; box-shadow: 0 0 0 4px var(--bg); }
+.dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--live); }
+.tag { display: inline-block; margin-top: 4px; padding: 1px 8px; border-radius: 99px; background: var(--raised); color: var(--muted); font-size: .78em; font-weight: 600; text-decoration: none; }
+
+#side { position: fixed; top: var(--nav-h); left: 0; bottom: 0; width: 240px; overflow-y: auto; padding: 10px 8px; background: var(--card); border-right: 1px solid var(--line); z-index: 5; }
+#side h4 { margin: 12px 8px 6px; font-size: .75em; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.side-row { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: var(--radius); text-decoration: none; }
+.side-row:hover { background: var(--raised); color: var(--fg); }
+.side-text { display: grid; min-width: 0; flex: 1; }
+.side-text b, .side-text small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-text b { font-size: .9em; }
+.side-text small, .side-row .off { color: var(--muted); font-size: .78em; }
+.side-empty { margin: 4px 8px; }
+body.has-side main.wide { margin-left: 240px; }
+/* 시청 페이지에선 치지직처럼 사이드바를 동그라미만 남기고 접는다 */
+body:has(.watch) #side { width: 64px; }
+body:has(.watch) #side :is(h4, .side-text, .off, .side-empty) { display: none; }
+body:has(.watch) .side-row { justify-content: center; position: relative; }
+body:has(.watch) .side-row .dot { position: absolute; right: 8px; bottom: 6px; box-shadow: 0 0 0 2px var(--card); }
+body.has-side:has(.watch) main.wide { margin-left: 64px; }
+
+.hero { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); margin-bottom: 28px; border-radius: 10px; overflow: hidden; text-decoration: none;
+  background: linear-gradient(120deg, #0f2a33, var(--card) 60%); border: 1px solid var(--line); }
+.hero:hover { color: inherit; border-color: var(--accent); }
+.hero-media video { border-radius: 0; }
+.hero-info { display: flex; flex-direction: column; justify-content: center; gap: 10px; padding: 24px 28px; min-width: 0; }
+.hero-info h2 { font-size: 1.6em; margin: 0; overflow-wrap: anywhere; }
+.hero-info p { margin: 0; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.hero-info .button { align-self: flex-start; margin-top: 6px; }
+.section-title { font-size: 1.2em; margin: 8px 0 14px; }
+.section-head { display: flex; align-items: baseline; justify-content: space-between; margin-top: 36px; }
+.section-head a { text-decoration: none; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: -6px 0 20px; }
+.chip { border-radius: 99px; padding: 6px 14px; background: var(--raised); color: var(--muted); }
+.chip[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+
+.card-body { display: flex; gap: 10px; margin-top: 10px; }
+.card-text { min-width: 0; flex: 1; }
+
+.channel-head { margin-bottom: 8px; }
+.channel-banner { height: 160px; border-radius: 10px; background: linear-gradient(120deg, #0b3540, #18181b 45%, #1e2f3f); }
+.channel-info { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 16px; margin-top: -42px; padding: 0 20px; }
+.channel-name h1 { margin: 0; font-size: 1.6em; overflow-wrap: anywhere; }
+.channel-name p { margin: 4px 0 0; }
+.live-btn { display: inline-flex; align-items: center; gap: 8px; background: var(--live); color: #fff; }
+.live-btn .dot { background: #fff; }
+.live-btn:hover { background: #ff2a24; color: #fff; }
+.community { max-width: 760px; }
+.community form { margin-bottom: 16px; }
+.posts { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.post .content { margin: 10px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.post .tag { margin: 0; }
+
+.watch-meta { margin-bottom: 4px; }
+.owner a { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; }
+
+@media (max-width: 1000px) {
+  #side { display: none; }
+  body.has-side main.wide, body.has-side:has(.watch) main.wide { margin-left: auto; }
+  .hero { grid-template-columns: minmax(0, 1fr); }
+  .hero-info { padding: 16px; }
+  nav .nav-link { display: none; }
+}
+@media (max-width: 768px) {
+  nav .search { width: auto; flex: 1; min-width: 0; }
+  nav > .spacer { display: none; }
+  nav .go-live, nav .menu summary > span:not(.avatar) { display: none; }
+  .channel-info { padding: 0 8px; }
+  .channel-banner { height: 110px; }
+}

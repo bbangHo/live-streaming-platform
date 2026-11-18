@@ -5,11 +5,26 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>방송 목록</title>
 <link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.20/dist/hls.min.js"></script>
 <script src="app.js"></script>
 </head>
 <body>
 <nav id="nav"></nav>
 <main class="wide">
+  <!-- 지금 가장 많이 보는 라이브 하나를 크게 (소리 없이 미리보기) -->
+  <a id="hero" class="hero" hidden>
+    <div class="hero-media" id="hero-media"></div>
+    <div class="hero-info">
+      <div class="row"><span class="badge live">방송 중</span><span id="hero-viewers" class="muted"></span></div>
+      <h2 id="hero-title"></h2>
+      <div class="row" id="hero-owner"></div>
+      <p id="hero-desc" class="muted"></p>
+      <span class="button primary">시청하기</span>
+    </div>
+  </a>
+
+  <h2 id="search-title" class="section-title" hidden></h2>
+
   <div class="list-head">
     <div class="tabs">
       <button data-status="" aria-pressed="true">전체</button>
@@ -17,10 +32,12 @@
     </div>
     <span id="create" hidden><button type="button" class="primary" onclick="document.getElementById('create-dialog').showModal()">＋ 방송 만들기</button></span>
   </div>
+  <div id="categories" class="chips" hidden></div>
   <dialog id="create-dialog">
     <h2>방송 만들기</h2>
     <form id="create-form">
       <input name="title" placeholder="방송 제목" maxlength="100" required autofocus>
+      <select name="category" id="create-category"></select>
       <textarea name="description" placeholder="설명 (선택)" maxlength="1000" rows="3"></textarea>
       <span class="error" id="create-error"></span>
       <div class="row"><span class="spacer"></span><button type="button" onclick="this.closest('dialog').close()">취소</button><button class="primary">만들기</button></div>
@@ -28,21 +45,89 @@
   </dialog>
   <ul id="list" class="grid"></ul>
   <p id="empty" class="muted" hidden>방송이 없습니다.</p>
+
+  <section id="vod-section" hidden>
+    <div class="section-head"><h2 class="section-title">최근 다시보기</h2><a href="recordings.html" class="muted">전체 보기 ›</a></div>
+    <ul id="vods" class="grid"></ul>
+  </section>
 </main>
 
 <script>
 const $ = (id) => document.getElementById(id);
-let filter = '';
+const params = new URLSearchParams(location.search);
+const q = (params.get('q') ?? '').trim();
+let filter = '', category = '', categorySupported = false, heroHls = null;
+
+for (const [k, v] of Object.entries(CATEGORY_LABEL)) $('create-category').append(el('option', { value: k }, v));
+$('create-category').value = 'TALK';
 
 async function load() {
-  const list = await api('/api/broadcasts' + (filter ? `?status=${filter}` : ''));
+  const qs = new URLSearchParams();
+  if (filter) qs.set('status', filter);
+  if (category) qs.set('category', category);
+  if (q) qs.set('q', q);
+  let list = await api('/api/broadcasts' + (qs.size ? `?${qs}` : ''));
+  categorySupported ||= list.some((b) => 'category' in b);
+  $('categories').hidden = !categorySupported;
+  // 서버가 아직 category·q를 모르면 무시하고 전부 주므로 화면에서도 한 번 더 거른다
+  if (category) list = list.filter((b) => b.category === category);
+  if (q) list = list.filter((b) => `${b.title} ${b.ownerUsername ?? ''}`.toLowerCase().includes(q.toLowerCase()));
+  // 라이브 먼저, 그다음 시청자 많은 순, 그다음 최신순
+  const rank = { LIVE: 0, READY: 1, ENDED: 2 };
+  list.sort((a, b) => (rank[a.status] - rank[b.status]) || ((b.viewerCount ?? 0) - (a.viewerCount ?? 0)) || (b.createdAt > a.createdAt ? 1 : -1));
   $('empty').hidden = list.length > 0;
-  $('list').replaceChildren(...list.map((b) => el('li', { className: 'card' },
-    el('a', { href: `broadcast.html?id=${b.id}` },
-      statusBadge(b.status),
-      el('h3', {}, b.title),
-      el('div', { className: 'muted' }, `${b.ownerUsername ?? '알 수 없음'} · ${kstDateTime(b.createdAt)}`)))));
+  $('empty').textContent = q ? `「${q}」에 맞는 방송이 없습니다.` : '방송이 없습니다.';
+  $('list').replaceChildren(...list.map(broadcastCard));
+  if (!q && !filter && !category) renderHero(list.find((b) => b.status === 'LIVE'));
 }
+
+function renderHero(b) {
+  $('hero').hidden = !b;
+  if (!b || $('hero').dataset.id === String(b.id)) return;
+  $('hero').dataset.id = b.id;
+  $('hero').href = `broadcast.html?id=${b.id}`;
+  $('hero-title').textContent = b.title;
+  $('hero-owner').replaceChildren(avatar(b.ownerUsername), el('b', {}, b.ownerUsername ?? '알 수 없음'),
+    CATEGORY_LABEL[b.category] ? el('span', { className: 'tag' }, CATEGORY_LABEL[b.category]) : '');
+  $('hero-viewers').textContent = viewers(b) ?? '';
+  $('hero-desc').textContent = b.description ?? '';
+  heroHls?.destroy(); heroHls = null;
+  const video = el('video', { autoplay: true, muted: true, playsInline: true });
+  $('hero-media').replaceChildren(video);
+  const src = location.origin + b.hlsPath;
+  if (window.Hls && Hls.isSupported()) {
+    const play = () => {
+      heroHls = new Hls({ lowLatencyMode: true });
+      // 막 켜진 방송은 아직 영상이 없어 404 → 3초 뒤 다시 (배너가 다른 방송으로 바뀌었으면 그만)
+      heroHls.on(Hls.Events.ERROR, (_, d) => { if (d.fatal) { heroHls.destroy(); setTimeout(() => $('hero').dataset.id === String(b.id) && play(), 3000); } });
+      heroHls.loadSource(src); heroHls.attachMedia(video);
+    };
+    play();
+  }
+  else video.src = src;
+}
+
+async function loadVods() {
+  if (q) return;
+  try {
+    const list = (await api('/api/recordings')).slice(0, 8);
+    $('vod-section').hidden = list.length === 0;
+    $('vods').replaceChildren(...list.map(vodCard));
+  } catch { /* 다시보기가 안 와도 목록은 보인다 */ }
+}
+
+if (q) { $('search-title').hidden = false; $('search-title').textContent = `「${q}」 검색 결과`; }
+
+$('categories').replaceChildren(...[['', '전체'], ...Object.entries(CATEGORY_LABEL)].map(([k, v]) => {
+  const chip = el('button', { type: 'button', className: 'chip' }, v);
+  chip.setAttribute('aria-pressed', k === '');
+  chip.onclick = () => {
+    category = k;
+    $('categories').querySelectorAll('.chip').forEach((c) => c.setAttribute('aria-pressed', c === chip));
+    load();
+  };
+  return chip;
+}));
 
 document.querySelectorAll('.tabs button').forEach((btn) => btn.onclick = () => {
   filter = btn.dataset.status;
@@ -54,13 +139,22 @@ $('create-form').onsubmit = async (e) => {
   e.preventDefault();
   const f = new FormData(e.target);
   try {
-    const b = await api('/api/broadcasts', { method: 'POST', body: { title: f.get('title'), description: f.get('description') || null } });
+    const b = await api('/api/broadcasts', { method: 'POST', body: { title: f.get('title'), description: f.get('description') || null, category: f.get('category') } });
     location.href = `broadcast.html?id=${b.id}`;
   } catch (err) { $('create-error').textContent = err.message; }
 };
 
-renderNav().then((me) => { $('create').hidden = !me; });
+renderNav().then((me) => {
+  $('create').hidden = !me;
+  if (location.hash === '#create') {
+    if (me) $('create-dialog').showModal();
+    else location.href = `login.html?next=${encodeURIComponent('index.html#create')}`;
+  }
+});
+window.onhashchange = () => location.hash === '#create' && !$('create').hidden && $('create-dialog').showModal();
 load();
+loadVods();
+setInterval(load, 15000); // 새로 켜진 방송·시청자 수 반영
 </script>
 </body>
 </html>
