@@ -21,8 +21,16 @@ public class MediaMtxClient {
         this.http = RestClient.builder().baseUrl(props.apiUrl()).requestFactory(timeouts).build();
     }
 
-    /** 지금 송출이 들어오고 있는 경로. sourceType은 예: "webRTCSession", sourceId는 그 세션 id. */
-    public record OnlinePath(String name, String sourceType, String sourceId) {}
+    /**
+     * 지금 송출이 들어오고 있는 경로. sourceType은 예: "webRTCSession", sourceId는 그 세션 id.
+     * readers: 이 경로를 읽는 쪽 수(시청자 수로 쓴다). 1.21은 HLS 플레이어마다 hlsSession 하나(쿠키·?session=).
+     * shortcut: 창을 닫아도 세션은 MediaMTX 타임아웃까지 남아 수가 늦게 줄고, 새로고침하면 잠깐 두 번 센다 — 정확해야 하면 프론트 heartbeat로 센다
+     */
+    public record OnlinePath(String name, String sourceType, String sourceId, int readers) {
+        public OnlinePath(String name, String sourceType, String sourceId) {
+            this(name, sourceType, sourceId, 0);
+        }
+    }
 
     record PathList(Integer pageCount, List<Map<String, Object>> items) {}
 
@@ -36,9 +44,11 @@ public class MediaMtxClient {
             boolean online = Boolean.TRUE.equals(item.get("online")) || Boolean.TRUE.equals(item.get("ready"));
             if (!online) continue;
             Map<String, Object> source = (Map<String, Object>) item.get("source");
+            List<?> readers = (List<?>) item.get("readers");
             out.add(new OnlinePath((String) item.get("name"),
                     source == null ? null : (String) source.get("type"),
-                    source == null ? null : (String) source.get("id")));
+                    source == null ? null : (String) source.get("id"),
+                    readers == null ? 0 : readers.size()));
         }
         return out;
     }

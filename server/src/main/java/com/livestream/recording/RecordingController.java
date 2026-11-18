@@ -35,8 +35,8 @@ public class RecordingController {
                                     String filePath, Instant startedAt, long durationMs, String playbackPath) {}
 
     @GetMapping("/api/recordings")
-    public List<RecordingResponse> list() {
-        return toResponses(service.list());
+    public List<RecordingResponse> list(@RequestParam(required = false) Long ownerId) {
+        return toResponses(service.list(ownerId));
     }
 
     @GetMapping("/api/broadcasts/{broadcastId}/recordings")

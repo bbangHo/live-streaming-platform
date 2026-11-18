@@ -13,6 +13,9 @@ public class Broadcast {
     /** READY(대기) → LIVE(방송 중) → ENDED(종료). ENDED는 끝 — 다시 방송하려면 새로 만든다. */
     public enum Status { READY, LIVE, ENDED }
 
+    /** 방송 분류(목록 필터). 라벨(게임·토크…)은 프론트가 붙인다. */
+    public enum Category { GAME, TALK, MUSIC, DEV, SPORTS, ETC }
+
     private static final SecureRandom RANDOM = new SecureRandom();
 
     @Id
@@ -31,6 +34,9 @@ public class Broadcast {
     @Enumerated(EnumType.STRING)
     private Status status = Status.READY;
 
+    @Enumerated(EnumType.STRING)
+    private Category category = Category.TALK;
+
     private Instant createdAt = Instant.now();
 
     private Instant startedAt;
@@ -39,10 +45,11 @@ public class Broadcast {
 
     protected Broadcast() {}
 
-    public Broadcast(Long ownerId, String title, String description) {
+    public Broadcast(Long ownerId, String title, String description, Category category) {
         this.ownerId = ownerId;
         this.title = title;
         this.description = description;
+        if (category != null) this.category = category;
         byte[] bytes = new byte[8];
         RANDOM.nextBytes(bytes);
         this.streamKey = HexFormat.of().formatHex(bytes);
@@ -52,9 +59,11 @@ public class Broadcast {
         return ownerId.equals(userId);
     }
 
-    public void update(String title, String description) {
+    /** category가 null이면 그대로 둔다. */
+    public void update(String title, String description, Category category) {
         this.title = title;
         this.description = description;
+        if (category != null) this.category = category;
     }
 
     /** 송출이 MediaMTX에 실제로 들어왔을 때(StreamStatusSync). 대기 → 방송 중. */
@@ -86,6 +95,7 @@ public class Broadcast {
     public String getDescription() { return description; }
     public String getStreamKey() { return streamKey; }
     public Status getStatus() { return status; }
+    public Category getCategory() { return category; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getStartedAt() { return startedAt; }
     public Instant getEndedAt() { return endedAt; }
