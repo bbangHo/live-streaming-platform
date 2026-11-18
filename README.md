@@ -205,6 +205,7 @@ npm run test:e2e
 - **TURN 서버 없음:** 서버가 공인 IP면 대부분 연결되지만, 대칭형 NAT(일부 회사·모바일 망)에서는 WebRTC 송출이 실패할 수 있습니다. 그때는 coturn을 붙여야 합니다.
 - **trickle ICE 없음:** 연결 후보를 다 모은 뒤 한 번에 보냅니다(최대 3초). 송출 시작이 그만큼 늦을 수 있습니다. → [whip.js](./web/whip.js)
 - **끊김 유예 시각을 메모리에 둠:** 백엔드가 재시작하면 유예(30초)가 한 번 더 주어집니다. 백엔드를 한 대만 띄운다는 전제입니다. → [StreamStatusSync](./server/src/main/java/com/livestream/stream/StreamStatusSync.java)
+- **스트림 키가 공개 응답에 보입니다:** 시청 주소(`hlsPath` = `/live/<스트림 키>/index.m3u8`)가 곧 스트림 키라서, 키를 숨겨도 시청 주소에서 알 수 있습니다. 대신 송출은 키만으로 안 되고 **방송 소유자의 로그인 토큰**이 있어야 합니다(배포 환경 `STREAM_DEV_BYPASS=false`). 키를 완전히 숨기려면 시청용 경로를 따로 두어야 합니다. → [StreamAuthService](./server/src/main/java/com/livestream/stream/StreamAuthService.java)
 - **종료된 방송은 다시 시작할 수 없습니다:** 새 방송을 만들어야 합니다. 의도한 설계입니다.
 - **CORS 허용 범위:** MediaMTX의 `webrtcAllowOrigins`·`hlsAllowOrigins`가 `*`입니다. 송출은 로그인 토큰으로 막혀 있어 위험은 작지만, 배포할 때는 서비스 도메인으로 좁히는 것이 맞습니다. → [mediamtx.yml](./media/mediamtx.yml)
 
