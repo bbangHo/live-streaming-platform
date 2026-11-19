@@ -68,8 +68,13 @@ class RecordingTest extends ApiTestSupport {
                 .andExpect(jsonPath("$[0].playbackPath", startsWith("/playback/get?path=live%2F" + key + "&start=2026-11-13T10%3A53%3A11.123456Z&duration=14&format=mp4")))
                 .andReturn().getResponse().getContentAsString();
         long id = ((Number) JsonPath.read(list, "$[0].id")).longValue();
-        mvc.perform(get("/api/recordings/" + id)).andExpect(status().isOk()).andExpect(jsonPath("$.ownerId").isNumber());
+        String detail = mvc.perform(get("/api/recordings/" + id)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.ownerId").isNumber()).andReturn().getResponse().getContentAsString();
         mvc.perform(get("/api/recordings")).andExpect(status().isOk());
+        long ownerId = ((Number) JsonPath.read(detail, "$.ownerId")).longValue();
+        mvc.perform(get("/api/recordings?ownerId=" + ownerId)).andExpect(jsonPath("$", hasSize(2)))
+                .andExpect(jsonPath("$[0].startedAt").value("2026-11-13T11:00:00Z")); // 전체 목록처럼 최신순
+        mvc.perform(get("/api/recordings?ownerId=999999999")).andExpect(jsonPath("$", hasSize(0)));
     }
 
     @Test

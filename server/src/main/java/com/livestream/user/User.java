@@ -1,6 +1,7 @@
 package com.livestream.user;
 
 import jakarta.persistence.*;
+import java.time.Instant;
 
 @Entity
 @Table(name = "users")
@@ -13,6 +14,8 @@ public class User {
 
     private String passwordHash;
 
+    private Instant createdAt = Instant.now();
+
     protected User() {}
 
     public User(String username, String passwordHash) {
@@ -23,4 +26,5 @@ public class User {
     public Long getId() { return id; }
     public String getUsername() { return username; }
     public String getPasswordHash() { return passwordHash; }
+    public Instant getCreatedAt() { return createdAt; }
 }

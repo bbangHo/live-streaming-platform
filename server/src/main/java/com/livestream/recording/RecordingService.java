@@ -11,6 +11,7 @@ import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.List;
+import org.springframework.data.domain.Limit;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -77,9 +78,10 @@ public class RecordingService {
         return Optional.of(r);
     }
 
+    /** ownerId가 null이면 전체. 최신순 최대 200개. */
     @Transactional(readOnly = true)
-    public List<Recording> list() {
-        return recordings.findTop200ByOrderByStartedAtDesc();
+    public List<Recording> list(Long ownerId) {
+        return ownerId == null ? recordings.findTop200ByOrderByStartedAtDesc() : recordings.findByOwner(ownerId, Limit.of(200));
     }
 
     @Transactional(readOnly = true)

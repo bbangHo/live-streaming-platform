@@ -1,5 +1,6 @@
 package com.livestream.broadcast;
 
+import com.livestream.stream.StreamStatusSync;
 import com.livestream.user.User;
 import com.livestream.user.UserRepository;
 import jakarta.validation.Valid;
@@ -20,31 +21,39 @@ import org.springframework.web.bind.annotation.*;
 public class BroadcastController {
     private final BroadcastService service;
     private final UserRepository users;
+    private final StreamStatusSync sync;
 
-    public BroadcastController(BroadcastService service, UserRepository users) {
+    public BroadcastController(BroadcastService service, UserRepository users, StreamStatusSync sync) {
         this.service = service;
         this.users = users;
+        this.sync = sync;
     }
 
-    public record BroadcastRequest(@NotBlank @Size(max = 100) String title, @Size(max = 1000) String description) {}
+    /** category: 생략하면 생성은 TALK, 수정은 그대로. 없는 값이면 400. */
+    public record BroadcastRequest(@NotBlank @Size(max = 100) String title, @Size(max = 1000) String description,
+                                   Broadcast.Category category) {}
 
     /** hlsPath: 같은 출처 기준 시청 주소(nginx·Caddy가 /live/ 를 MediaMTX로 넘긴다). */
     public record BroadcastResponse(Long id, Long ownerId, String ownerUsername, String title, String description,
-                                    Broadcast.Status status, String streamKey, String hlsPath, Instant createdAt,
+                                    Broadcast.Status status, Broadcast.Category category, int viewerCount,
+                                    String streamKey, String hlsPath, Instant createdAt,
                                     Instant startedAt, Instant endedAt) {
-        static BroadcastResponse of(Broadcast b, String ownerUsername) {
+        static BroadcastResponse of(Broadcast b, String ownerUsername, int viewerCount) {
             return new BroadcastResponse(b.getId(), b.getOwnerId(), ownerUsername, b.getTitle(), b.getDescription(),
-                    b.getStatus(), b.getStreamKey(), "/live/" + b.getStreamKey() + "/index.m3u8", b.getCreatedAt(),
-                    b.getStartedAt(), b.getEndedAt());
+                    b.getStatus(), b.getCategory(), viewerCount, b.getStreamKey(),
+                    "/live/" + b.getStreamKey() + "/index.m3u8", b.getCreatedAt(), b.getStartedAt(), b.getEndedAt());
         }
     }
 
     @GetMapping
-    public List<BroadcastResponse> list(@RequestParam(required = false) Broadcast.Status status) {
-        List<Broadcast> list = service.list(status);
+    public List<BroadcastResponse> list(@RequestParam(required = false) Broadcast.Status status,
+                                        @RequestParam(required = false) Broadcast.Category category,
+                                        @RequestParam(required = false) String q,
+                                        @RequestParam(required = false) Long ownerId) {
+        List<Broadcast> list = service.list(status, category, q, ownerId);
         Map<Long, String> names = users.findAllById(list.stream().map(Broadcast::getOwnerId).distinct().toList())
                 .stream().collect(Collectors.toMap(User::getId, User::getUsername));
-        return list.stream().map(b -> BroadcastResponse.of(b, names.get(b.getOwnerId()))).toList();
+        return list.stream().map(b -> BroadcastResponse.of(b, names.get(b.getOwnerId()), sync.viewerCount(b))).toList();
     }
 
     @GetMapping("/{id}")
@@ -55,13 +64,13 @@ public class BroadcastController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public BroadcastResponse create(@AuthenticationPrincipal Long userId, @Valid @RequestBody BroadcastRequest req) {
-        return toResponse(service.create(userId, req.title(), req.description()));
+        return toResponse(service.create(userId, req.title(), req.description(), req.category()));
     }
 
     @PatchMapping("/{id}")
     public BroadcastResponse update(@AuthenticationPrincipal Long userId, @PathVariable Long id,
                                     @Valid @RequestBody BroadcastRequest req) {
-        return toResponse(service.update(userId, id, req.title(), req.description()));
+        return toResponse(service.update(userId, id, req.title(), req.description(), req.category()));
     }
 
     @DeleteMapping("/{id}")
@@ -76,6 +85,7 @@ public class BroadcastController {
     }
 
     private BroadcastResponse toResponse(Broadcast b) {
-        return BroadcastResponse.of(b, users.findById(b.getOwnerId()).map(User::getUsername).orElse(null));
+        return BroadcastResponse.of(b, users.findById(b.getOwnerId()).map(User::getUsername).orElse(null),
+                sync.viewerCount(b));
     }
 }

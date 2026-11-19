@@ -34,6 +34,9 @@ public class StreamStatusSync {
     /** 방송 id → 송출이 처음 끊긴 것을 본 시각. shortcut: 메모리에만 둔다 — 백엔드가 재시작하면 비어 유예가 한 번 더 주어진다. 백엔드를 여러 대 띄우면 DB로 옮긴다 */
     private final Map<Long, Instant> offlineSince = new HashMap<>();
 
+    /** 스트림 키 → 시청자 수. 2초 조회 결과를 그대로 둔다(따로 MediaMTX를 부르지 않음). 조회 실패면 비운다 → 0 */
+    private volatile Map<String, Integer> viewers = Map.of();
+
     public StreamStatusSync(MediaMtxClient mediamtx, BroadcastRepository broadcasts, MediaProperties props,
                             Clock clock, TransactionTemplate tx) {
         this.mediamtx = mediamtx;
@@ -52,8 +55,14 @@ public class StreamStatusSync {
         } catch (RuntimeException e) {
             // MediaMTX를 못 보면 아무것도 바꾸지 않는다 (전부 종료시키는 사고 방지)
             log.warn("MediaMTX 상태 조회 실패: {}", e.getMessage());
+            viewers = Map.of();
             return;
         }
+        Map<String, Integer> counts = new HashMap<>();
+        for (MediaMtxClient.OnlinePath p : online) {
+            StreamAuthService.streamKeyOf(p.name()).ifPresent(k -> counts.put(k, p.readers()));
+        }
+        viewers = counts;
         for (MediaMtxClient.OnlinePath p : reconcile(online, clock.instant())) {
             try {
                 mediamtx.kick(p);
@@ -62,6 +71,11 @@ public class StreamStatusSync {
                 log.warn("송출 끊기 실패 {}: {}", p.name(), e.getMessage());
             }
         }
+    }
+
+    /** 방송 중이 아니면 0. */
+    public int viewerCount(Broadcast b) {
+        return b.getStatus() == Broadcast.Status.LIVE ? viewers.getOrDefault(b.getStreamKey(), 0) : 0;
     }
 
     /** 상태를 맞추고, 끊어야 할 송출 목록을 돌려준다. 테스트에서 시각을 넣어 직접 부른다. */

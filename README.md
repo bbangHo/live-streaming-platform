@@ -147,15 +147,20 @@ curl -i -X POST http://localhost:8000/live/$KEY/whip -H 'Content-Type: applicati
 | `POST /api/auth/refresh` | 공개 | `{refreshToken}` → 새 토큰 쌍. 쓴 refresh token은 폐기(회전) |
 | `POST /api/auth/logout` | 공개 | `{refreshToken}` 폐기 → 204. access token은 남은 수명(15분)까지만 유효 |
 | `GET /api/auth/me` | 로그인 | 내 정보 |
-| `GET /api/broadcasts[?status=LIVE]`, `GET /api/broadcasts/{id}` | 공개 | 방송 목록(최신순, 상태 필터)·상세. 응답에 방송자·스트림 키·`hlsPath`(시청 주소) |
-| `POST /api/broadcasts` | 로그인 | `{title, description?}` 방송 등록 (등록자 = 소유자, 스트림 키 자동 발급) |
-| `PATCH /api/broadcasts/{id}`, `DELETE /api/broadcasts/{id}` | **소유자** | `{title, description?}` 수정 · 삭제. 타인 403, 비로그인 401. 승인된 후원이 있는 방송은 삭제 409 |
+| `GET /api/broadcasts[?status=&category=&q=&ownerId=]`, `GET /api/broadcasts/{id}` | 공개 | 방송 목록(최신순, 상태·카테고리·검색어(제목·방송자 이름)·방송자 필터 조합)·상세. 응답에 방송자·`category`·`viewerCount`(MediaMTX 시청 세션 수)·스트림 키·`hlsPath`(시청 주소) |
+| `POST /api/broadcasts` | 로그인 | `{title, description?, category?}` 방송 등록 (등록자 = 소유자, 스트림 키 자동 발급, 카테고리 `GAME`·`TALK`·`MUSIC`·`DEV`·`SPORTS`·`ETC`, 기본 `TALK`) |
+| `PATCH /api/broadcasts/{id}`, `DELETE /api/broadcasts/{id}` | **소유자** | `{title, description?, category?}` 수정 · 삭제. 타인 403, 비로그인 401. 승인된 후원이 있는 방송은 삭제 409 |
 | `POST /api/broadcasts/{id}/stop` | **소유자** | 방송 종료 `LIVE → ENDED` (송출 중이면 끊김). 방송 중이 아니면 409. 시작 API는 없음 — 송출이 MediaMTX에 들어오면 서버가 `READY → LIVE` |
 | `GET /api/broadcasts/{id}/comments[?after=<댓글 id>]` | 공개 | 댓글 목록(오래된 순, 최대 200개). `after`면 그 뒤 것만 |
 | `POST /api/broadcasts/{id}/comments` | 로그인 | `{content}` 댓글 작성 (1~500자) |
 | `PATCH /api/comments/{id}`, `DELETE /api/comments/{id}` | **작성자** | 댓글 수정·삭제. 타인(방송 소유자 포함) 403, 비로그인 401 |
-| `GET /api/recordings`, `GET /api/recordings/{id}`, `GET /api/broadcasts/{id}/recordings` | 공개 | 녹화 목록(최신순)·상세·방송별 목록. `filePath`(저장 위치), `startedAt`, `durationMs`, `playbackPath`(재생 주소) |
+| `GET /api/recordings[?ownerId=]`, `GET /api/recordings/{id}`, `GET /api/broadcasts/{id}/recordings` | 공개 | 녹화 목록(최신순, 방송자 필터)·상세·방송별 목록. `filePath`(저장 위치), `startedAt`, `durationMs`, `playbackPath`(재생 주소) |
 | `DELETE /api/recordings/{id}` | **방송 소유자** | 녹화 삭제(파일 + DB). 타인 403 |
+| `GET /api/channels/{userId}` | 공개 | 채널(= 사용자) `{id, username, followerCount, following, liveBroadcastId, createdAt}`. 없으면 404 |
+| `PUT /api/channels/{userId}/follow`, `DELETE …/follow` | 로그인 | 팔로우·언팔로우 → 204 (반복해도 204, 멱등). 자기 자신 팔로우 400 |
+| `GET /api/me/following` | 로그인 | 내가 팔로우한 채널 (라이브 중 먼저, 그다음 이름순, 라이브 방송 id·제목 포함) |
+| `GET /api/channels/{userId}/posts`, `POST …/posts` | 공개 / 로그인 | 채널 커뮤니티 게시글 목록(최신 50개) · 작성 `{content}` (1~1000자) |
+| `DELETE /api/posts/{id}` | **작성자·채널 주인** | 게시글 삭제. 그 외 403 |
 | `GET /api/broadcasts/{id}/donations` | 공개 | 후원 합계 `{total, count, recent[]}` (승인된 것만) |
 | `POST /api/broadcasts/{id}/donations` | 로그인 | `{amount, message?}` 주문 생성 → `{orderId, amount, orderName, provider, clientKey}`. 금액 1,000~1,000,000원, 본인 방송 400 |
 | `POST /api/donations/confirm` | 로그인(**주문자**) | `{paymentKey, orderId, amount}` 승인 → 200 `DONE` / 402 `FAILED`(PG 거절). 금액 불일치 400, 남의 주문 403, 다른 결제로 이미 승인·이미 쓴 결제 키 409. 같은 요청 반복은 같은 결과(재적립 없음) |
@@ -200,11 +205,14 @@ npm run test:e2e
 - **TURN 서버 없음:** 서버가 공인 IP면 대부분 연결되지만, 대칭형 NAT(일부 회사·모바일 망)에서는 WebRTC 송출이 실패할 수 있습니다. 그때는 coturn을 붙여야 합니다.
 - **trickle ICE 없음:** 연결 후보를 다 모은 뒤 한 번에 보냅니다(최대 3초). 송출 시작이 그만큼 늦을 수 있습니다. → [whip.js](./web/whip.js)
 - **끊김 유예 시각을 메모리에 둠:** 백엔드가 재시작하면 유예(30초)가 한 번 더 주어집니다. 백엔드를 한 대만 띄운다는 전제입니다. → [StreamStatusSync](./server/src/main/java/com/livestream/stream/StreamStatusSync.java)
+- **스트림 키가 공개 응답에 보입니다:** 시청 주소(`hlsPath` = `/live/<스트림 키>/index.m3u8`)가 곧 스트림 키라서, 키를 숨겨도 시청 주소에서 알 수 있습니다. 대신 송출은 키만으로 안 되고 **방송 소유자의 로그인 토큰**이 있어야 합니다(배포 환경 `STREAM_DEV_BYPASS=false`). 키를 완전히 숨기려면 시청용 경로를 따로 두어야 합니다. → [StreamAuthService](./server/src/main/java/com/livestream/stream/StreamAuthService.java)
 - **종료된 방송은 다시 시작할 수 없습니다:** 새 방송을 만들어야 합니다. 의도한 설계입니다.
 - **CORS 허용 범위:** MediaMTX의 `webrtcAllowOrigins`·`hlsAllowOrigins`가 `*`입니다. 송출은 로그인 토큰으로 막혀 있어 위험은 작지만, 배포할 때는 서비스 도메인으로 좁히는 것이 맞습니다. → [mediamtx.yml](./media/mediamtx.yml)
 
 **목록·실시간성**
 - **페이지네이션 없음:** 방송 목록은 전체, 녹화·댓글은 최근 200개, 최근 후원은 20개까지 보여 줍니다.
+- **시청자 수는 MediaMTX 시청 세션 수:** 창을 닫아도 세션이 타임아웃될 때까지 남아 수가 늦게 줄고, 새로고침하면 잠깐 두 번 셉니다. 2초 상태 동기화 때 같이 읽으므로 최대 2초 늦습니다. → [MediaMtxClient](./server/src/main/java/com/livestream/stream/MediaMtxClient.java)
+- **채널 게시글은 최신 50개까지:** 페이지네이션 없음.
 - **댓글·후원은 실시간 푸시가 아닙니다:** 화면이 3초(댓글)·5초(후원)마다 새로 가져옵니다.
 
 **녹화**
